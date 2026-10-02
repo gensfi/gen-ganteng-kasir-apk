@@ -1,14 +1,18 @@
 package com.example.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -27,6 +31,8 @@ fun MainAppScaffold(viewModel: CafePosViewModel) {
     var showCartSheet by remember { mutableStateOf(false) }
     var showPaymentDialog by remember { mutableStateOf(false) }
     var showMoreMenuSheet by remember { mutableStateOf(false) }
+
+    val isKasir = currentUser?.role == "KASIR"
 
     // Intercept BackHandler for sub-screens
     if (currentScreen != CafeScreen.POS) {
@@ -48,7 +54,7 @@ fun MainAppScaffold(viewModel: CafePosViewModel) {
                     Spacer(Modifier.height(16.dp))
                     Icon(
                         Icons.Filled.LocalCafe,
-                        contentDescription = "KafePOS",
+                        contentDescription = "Rencana Kopi",
                         tint = CoffeeAmber,
                         modifier = Modifier.size(32.dp)
                     )
@@ -60,42 +66,56 @@ fun MainAppScaffold(viewModel: CafePosViewModel) {
                         icon = { Icon(Icons.Filled.PointOfSale, contentDescription = null) },
                         label = { Text("Kasir") }
                     )
-                    NavigationRailItem(
-                        selected = currentScreen == CafeScreen.INVENTORY,
-                        onClick = { viewModel.navigateTo(CafeScreen.INVENTORY) },
-                        icon = { Icon(Icons.Filled.Inventory2, contentDescription = null) },
-                        label = { Text("Bahan") }
-                    )
-                    NavigationRailItem(
-                        selected = currentScreen == CafeScreen.MENU_MANAGEMENT,
-                        onClick = { viewModel.navigateTo(CafeScreen.MENU_MANAGEMENT) },
-                        icon = { Icon(Icons.Filled.RestaurantMenu, contentDescription = null) },
-                        label = { Text("Menu") }
-                    )
-                    NavigationRailItem(
-                        selected = currentScreen == CafeScreen.REPORTS,
-                        onClick = { viewModel.navigateTo(CafeScreen.REPORTS) },
-                        icon = { Icon(Icons.Filled.BarChart, contentDescription = null) },
-                        label = { Text("Laporan") }
-                    )
+
                     NavigationRailItem(
                         selected = currentScreen == CafeScreen.PRINTER_SETTINGS,
                         onClick = { viewModel.navigateTo(CafeScreen.PRINTER_SETTINGS) },
                         icon = { Icon(Icons.Filled.Print, contentDescription = null) },
                         label = { Text("Printer") }
                     )
+
+                    if (!isKasir) {
+                        NavigationRailItem(
+                            selected = currentScreen == CafeScreen.INVENTORY,
+                            onClick = { viewModel.navigateTo(CafeScreen.INVENTORY) },
+                            icon = { Icon(Icons.Filled.Inventory2, contentDescription = null) },
+                            label = { Text("Bahan") }
+                        )
+                        NavigationRailItem(
+                            selected = currentScreen == CafeScreen.MENU_MANAGEMENT,
+                            onClick = { viewModel.navigateTo(CafeScreen.MENU_MANAGEMENT) },
+                            icon = { Icon(Icons.Filled.RestaurantMenu, contentDescription = null) },
+                            label = { Text("Menu") }
+                        )
+                        NavigationRailItem(
+                            selected = currentScreen == CafeScreen.REPORTS,
+                            onClick = { viewModel.navigateTo(CafeScreen.REPORTS) },
+                            icon = { Icon(Icons.Filled.BarChart, contentDescription = null) },
+                            label = { Text("Laporan") }
+                        )
+                        NavigationRailItem(
+                            selected = currentScreen == CafeScreen.GOOGLE_SHEETS,
+                            onClick = { viewModel.navigateTo(CafeScreen.GOOGLE_SHEETS) },
+                            icon = { Icon(Icons.Filled.CloudSync, contentDescription = null) },
+                            label = { Text("Sheets") }
+                        )
+                        NavigationRailItem(
+                            selected = currentScreen == CafeScreen.SETTINGS,
+                            onClick = { viewModel.navigateTo(CafeScreen.SETTINGS) },
+                            icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
+                            label = { Text("Setting") }
+                        )
+                    }
+
+                    Spacer(Modifier.weight(1f))
+
                     NavigationRailItem(
-                        selected = currentScreen == CafeScreen.GOOGLE_SHEETS,
-                        onClick = { viewModel.navigateTo(CafeScreen.GOOGLE_SHEETS) },
-                        icon = { Icon(Icons.Filled.CloudSync, contentDescription = null) },
-                        label = { Text("Sheets") }
+                        selected = false,
+                        onClick = { viewModel.switchUser() },
+                        icon = { Icon(Icons.Outlined.Lock, contentDescription = "Ganti Akun") },
+                        label = { Text("Kunci") }
                     )
-                    NavigationRailItem(
-                        selected = currentScreen == CafeScreen.SETTINGS,
-                        onClick = { viewModel.navigateTo(CafeScreen.SETTINGS) },
-                        icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
-                        label = { Text("Setting") }
-                    )
+                    Spacer(Modifier.height(16.dp))
                 }
             }
 
@@ -114,38 +134,56 @@ fun MainAppScaffold(viewModel: CafePosViewModel) {
                                 label = { Text("Kasir") },
                                 modifier = Modifier.testTag("nav_pos")
                             )
+
                             NavigationBarItem(
-                                selected = currentScreen == CafeScreen.INVENTORY,
-                                onClick = { viewModel.navigateTo(CafeScreen.INVENTORY) },
-                                icon = { Icon(Icons.Filled.Inventory2, contentDescription = null) },
-                                label = { Text("Bahan") },
-                                modifier = Modifier.testTag("nav_inventory")
+                                selected = currentScreen == CafeScreen.PRINTER_SETTINGS,
+                                onClick = { viewModel.navigateTo(CafeScreen.PRINTER_SETTINGS) },
+                                icon = { Icon(Icons.Filled.Print, contentDescription = null) },
+                                label = { Text("Printer") },
+                                modifier = Modifier.testTag("nav_printer")
                             )
-                            NavigationBarItem(
-                                selected = currentScreen == CafeScreen.MENU_MANAGEMENT,
-                                onClick = { viewModel.navigateTo(CafeScreen.MENU_MANAGEMENT) },
-                                icon = { Icon(Icons.Filled.RestaurantMenu, contentDescription = null) },
-                                label = { Text("Menu") },
-                                modifier = Modifier.testTag("nav_menu")
-                            )
-                            NavigationBarItem(
-                                selected = currentScreen == CafeScreen.REPORTS,
-                                onClick = { viewModel.navigateTo(CafeScreen.REPORTS) },
-                                icon = { Icon(Icons.Filled.BarChart, contentDescription = null) },
-                                label = { Text("Laporan") },
-                                modifier = Modifier.testTag("nav_reports")
-                            )
-                            NavigationBarItem(
-                                selected = currentScreen in listOf(
-                                    CafeScreen.PRINTER_SETTINGS,
-                                    CafeScreen.GOOGLE_SHEETS,
-                                    CafeScreen.SETTINGS
-                                ),
-                                onClick = { showMoreMenuSheet = true },
-                                icon = { Icon(Icons.Filled.MoreHoriz, contentDescription = null) },
-                                label = { Text("Lainnya") },
-                                modifier = Modifier.testTag("nav_more")
-                            )
+
+                            if (isKasir) {
+                                NavigationBarItem(
+                                    selected = false,
+                                    onClick = { viewModel.switchUser() },
+                                    icon = { Icon(Icons.Outlined.Lock, contentDescription = null) },
+                                    label = { Text("Ganti Akun") },
+                                    modifier = Modifier.testTag("nav_switch_user")
+                                )
+                            } else {
+                                NavigationBarItem(
+                                    selected = currentScreen == CafeScreen.INVENTORY,
+                                    onClick = { viewModel.navigateTo(CafeScreen.INVENTORY) },
+                                    icon = { Icon(Icons.Filled.Inventory2, contentDescription = null) },
+                                    label = { Text("Bahan") },
+                                    modifier = Modifier.testTag("nav_inventory")
+                                )
+                                NavigationBarItem(
+                                    selected = currentScreen == CafeScreen.MENU_MANAGEMENT,
+                                    onClick = { viewModel.navigateTo(CafeScreen.MENU_MANAGEMENT) },
+                                    icon = { Icon(Icons.Filled.RestaurantMenu, contentDescription = null) },
+                                    label = { Text("Menu") },
+                                    modifier = Modifier.testTag("nav_menu")
+                                )
+                                NavigationBarItem(
+                                    selected = currentScreen == CafeScreen.REPORTS,
+                                    onClick = { viewModel.navigateTo(CafeScreen.REPORTS) },
+                                    icon = { Icon(Icons.Filled.BarChart, contentDescription = null) },
+                                    label = { Text("Laporan") },
+                                    modifier = Modifier.testTag("nav_reports")
+                                )
+                                NavigationBarItem(
+                                    selected = currentScreen in listOf(
+                                        CafeScreen.GOOGLE_SHEETS,
+                                        CafeScreen.SETTINGS
+                                    ),
+                                    onClick = { showMoreMenuSheet = true },
+                                    icon = { Icon(Icons.Filled.MoreHoriz, contentDescription = null) },
+                                    label = { Text("Lainnya") },
+                                    modifier = Modifier.testTag("nav_more")
+                                )
+                            }
                         }
                     }
                 }
@@ -155,35 +193,41 @@ fun MainAppScaffold(viewModel: CafePosViewModel) {
                         .fillMaxSize()
                         .padding(innerPadding)
                 ) {
-                    when (currentScreen) {
-                        CafeScreen.POS -> PosScreen(
-                            viewModel = viewModel,
-                            onOpenCart = { showCartSheet = true }
+                    if (isKasir && currentScreen !in listOf(CafeScreen.POS, CafeScreen.PRINTER_SETTINGS)) {
+                        AccessDeniedScreen(
+                            onLoginAdmin = { viewModel.switchUser() }
                         )
-                        CafeScreen.INVENTORY -> InventoryScreen(
-                            viewModel = viewModel,
-                            onBack = { viewModel.navigateTo(CafeScreen.POS) }
-                        )
-                        CafeScreen.MENU_MANAGEMENT -> MenuManagementScreen(
-                            viewModel = viewModel,
-                            onBack = { viewModel.navigateTo(CafeScreen.POS) }
-                        )
-                        CafeScreen.REPORTS -> ReportsScreen(
-                            viewModel = viewModel,
-                            onBack = { viewModel.navigateTo(CafeScreen.POS) }
-                        )
-                        CafeScreen.PRINTER_SETTINGS -> PrinterSettingsScreen(
-                            viewModel = viewModel,
-                            onBack = { viewModel.navigateTo(CafeScreen.POS) }
-                        )
-                        CafeScreen.GOOGLE_SHEETS -> GoogleSheetsScreen(
-                            viewModel = viewModel,
-                            onBack = { viewModel.navigateTo(CafeScreen.POS) }
-                        )
-                        CafeScreen.SETTINGS -> SettingsScreen(
-                            viewModel = viewModel,
-                            onBack = { viewModel.navigateTo(CafeScreen.POS) }
-                        )
+                    } else {
+                        when (currentScreen) {
+                            CafeScreen.POS -> PosScreen(
+                                viewModel = viewModel,
+                                onOpenCart = { showCartSheet = true }
+                            )
+                            CafeScreen.INVENTORY -> InventoryScreen(
+                                viewModel = viewModel,
+                                onBack = { viewModel.navigateTo(CafeScreen.POS) }
+                            )
+                            CafeScreen.MENU_MANAGEMENT -> MenuManagementScreen(
+                                viewModel = viewModel,
+                                onBack = { viewModel.navigateTo(CafeScreen.POS) }
+                            )
+                            CafeScreen.REPORTS -> ReportsScreen(
+                                viewModel = viewModel,
+                                onBack = { viewModel.navigateTo(CafeScreen.POS) }
+                            )
+                            CafeScreen.PRINTER_SETTINGS -> PrinterSettingsScreen(
+                                viewModel = viewModel,
+                                onBack = { viewModel.navigateTo(CafeScreen.POS) }
+                            )
+                            CafeScreen.GOOGLE_SHEETS -> GoogleSheetsScreen(
+                                viewModel = viewModel,
+                                onBack = { viewModel.navigateTo(CafeScreen.POS) }
+                            )
+                            CafeScreen.SETTINGS -> SettingsScreen(
+                                viewModel = viewModel,
+                                onBack = { viewModel.navigateTo(CafeScreen.POS) }
+                            )
+                        }
                     }
                 }
             }
@@ -284,3 +328,68 @@ fun MainAppScaffold(viewModel: CafePosViewModel) {
         }
     }
 }
+
+@Composable
+fun AccessDeniedScreen(onLoginAdmin: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.background,
+        modifier = Modifier.fillMaxSize()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(80.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .background(CoffeeRed.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Filled.Lock,
+                    contentDescription = null,
+                    tint = CoffeeRed,
+                    modifier = Modifier.size(44.dp)
+                )
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            Text(
+                "Akses Terbatas: Khusus Owner / Admin",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = CoffeeBrownDark,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            Text(
+                "Akun Kasir hanya memiliki akses ke modul penjualan POS dan cetak struk Bluetooth.\nFitur ini memerlukan hak akses Owner / Manager.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = NeutralMedium,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+
+            Spacer(Modifier.height(28.dp))
+
+            Button(
+                onClick = onLoginAdmin,
+                colors = ButtonDefaults.buttonColors(containerColor = CoffeeBrownPrimary),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.height(48.dp)
+            ) {
+                Icon(Icons.Filled.Key, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Login sebagai Admin (PIN 1234)", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+

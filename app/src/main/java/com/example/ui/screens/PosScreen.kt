@@ -19,7 +19,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -27,6 +30,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.example.data.local.entity.CategoryEntity
 import com.example.data.local.entity.MenuEntity
 import com.example.data.repository.CartItem
@@ -71,7 +76,7 @@ fun PosScreen(
                             )
                             Spacer(Modifier.width(6.dp))
                             Text(
-                                "KafePOS",
+                                "Rencana Kopi",
                                 style = MaterialTheme.typography.titleLarge.copy(
                                     fontWeight = FontWeight.Bold,
                                     color = CoffeeBrownDark
@@ -228,23 +233,37 @@ fun PosScreen(
                     FilterChip(
                         selected = selectedCategory == null,
                         onClick = { viewModel.selectCategory(null) },
-                        label = { Text("Semua Menu") },
+                        label = { Text("Semua Menu", fontWeight = if (selectedCategory == null) FontWeight.Bold else FontWeight.Medium) },
                         leadingIcon = {
-                            Icon(Icons.Filled.RestaurantMenu, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(
+                                Icons.Filled.RestaurantMenu,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = if (selectedCategory == null) Color.White else BrightOrangePrimary
+                            )
                         },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = CoffeeBrownPrimary,
+                            containerColor = Color.White,
+                            labelColor = NeutralDark,
+                            selectedContainerColor = BrightOrangePrimary,
                             selectedLabelColor = Color.White
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = selectedCategory == null,
+                            borderColor = NeutralBorder,
+                            selectedBorderColor = BrightOrangePrimary
                         ),
                         modifier = Modifier.testTag("category_chip_all")
                     )
                 }
 
                 items(categories) { cat ->
+                    val isSelected = selectedCategory == cat.id
                     FilterChip(
-                        selected = selectedCategory == cat.id,
+                        selected = isSelected,
                         onClick = { viewModel.selectCategory(cat.id) },
-                        label = { Text(cat.name) },
+                        label = { Text(cat.name, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium) },
                         leadingIcon = {
                             val icon = when (cat.iconName) {
                                 "Coffee" -> Icons.Filled.LocalCafe
@@ -253,11 +272,24 @@ fun PosScreen(
                                 "Food" -> Icons.Filled.Fastfood
                                 else -> Icons.Filled.Category
                             }
-                            Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(
+                                icon,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = if (isSelected) Color.White else BrightOrangePrimary
+                            )
                         },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = CoffeeBrownPrimary,
+                            containerColor = Color.White,
+                            labelColor = NeutralDark,
+                            selectedContainerColor = BrightOrangePrimary,
                             selectedLabelColor = Color.White
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = isSelected,
+                            borderColor = NeutralBorder,
+                            selectedBorderColor = BrightOrangePrimary
                         ),
                         modifier = Modifier.testTag("category_chip_${cat.id}")
                     )
@@ -359,98 +391,134 @@ fun MenuGridCard(
 ) {
     Card(
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF1F5F9)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onAddToCart() }
             .testTag("menu_card_${menu.id}")
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            // Header icon badge
+        Column {
+            // Product Photo Banner
             Box(
                 modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(PrimaryContainer),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .height(115.dp)
+                    .background(Color(0xFFFFF7ED))
             ) {
-                Icon(
-                    Icons.Filled.LocalCafe,
-                    contentDescription = null,
-                    tint = CoffeeBrownPrimary,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-
-            Spacer(Modifier.height(10.dp))
-
-            Text(
-                text = menu.name,
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    color = NeutralDark
-                ),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            if (menu.description.isNotBlank()) {
-                Text(
-                    text = menu.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = NeutralMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.height(32.dp)
-                )
-            } else {
-                Spacer(Modifier.height(32.dp))
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = currency.format(menu.price),
-                    style = MaterialTheme.typography.titleSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = CoffeeBrownPrimary
+                if (!menu.imageUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(menu.imageUrl)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = menu.name,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
                     )
-                )
-
-                Row {
-                    IconButton(
-                        onClick = onAddWithNotes,
-                        modifier = Modifier.size(32.dp)
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(Color(0xFFFFEDD5), Color(0xFFFEF3C7))
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            Icons.Outlined.EditNote,
-                            contentDescription = "Catatan Khusus",
-                            tint = CoffeeAmber,
-                            modifier = Modifier.size(18.dp)
+                            Icons.Filled.LocalCafe,
+                            contentDescription = null,
+                            tint = BrightOrangePrimary,
+                            modifier = Modifier.size(42.dp)
                         )
                     }
+                }
+
+                // Quick Add overlay button at top-right - Bright & Vibrant
+                IconButton(
+                    onClick = onAddToCart,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .size(34.dp)
+                        .background(BrightOrangePrimary, CircleShape)
+                ) {
+                    Icon(
+                        Icons.Filled.Add,
+                        contentDescription = "Tambah Cepat",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            Column(modifier = Modifier.padding(10.dp)) {
+                Text(
+                    text = menu.name,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = NeutralDark,
+                        fontSize = 15.sp
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                if (menu.description.isNotBlank()) {
+                    Text(
+                        text = menu.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = NeutralMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                } else {
+                    Spacer(Modifier.height(14.dp))
+                }
+
+                Spacer(Modifier.height(6.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = currency.format(menu.price),
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontWeight = FontWeight.ExtraBold,
+                            color = BrightOrangePrimary,
+                            fontSize = 14.sp
+                        )
+                    )
 
                     Surface(
-                        shape = CircleShape,
-                        color = CoffeeBrownPrimary,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clickable { onAddToCart() }
+                        shape = RoundedCornerShape(8.dp),
+                        color = BrightPeach,
+                        modifier = Modifier.clickable { onAddWithNotes() }
                     ) {
-                        Icon(
-                            Icons.Filled.Add,
-                            contentDescription = "Tambah",
-                            tint = Color.White,
-                            modifier = Modifier
-                                .padding(6.dp)
-                                .size(20.dp)
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                        ) {
+                            Icon(
+                                Icons.Outlined.EditNote,
+                                contentDescription = "Catatan Khusus",
+                                tint = BrightOrangeDark,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(Modifier.width(2.dp))
+                            Text(
+                                "Note",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = BrightOrangeDark
+                            )
+                        }
                     }
                 }
             }

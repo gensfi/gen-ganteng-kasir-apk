@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "KafePOS"
+rootProject.name = "Rencana Kopi"
 
 include(":app")

@@ -11,7 +11,11 @@ object InitialDataSeeder {
 
     suspend fun seedIfNeeded(database: AppDatabase) {
         val userCount = database.userDao().getUserCount()
-        if (userCount > 0) return
+        if (userCount > 0) {
+            // Backfill images for existing menus if they don't have imageUrl
+            backfillImagesIfMissing(database)
+            return
+        }
 
         // 1. Default Users (Admin & Kasir)
         database.userDao().insertUser(
@@ -33,10 +37,10 @@ object InitialDataSeeder {
 
         // 2. Default Cafe Settings
         val defaultSettings = listOf(
-            SettingEntity("cafe_name", "Kopi Kenangan Senja"),
+            SettingEntity("cafe_name", "Rencana Kopi"),
             SettingEntity("cafe_address", "Jl. Malioboro No. 45, Yogyakarta"),
             SettingEntity("cafe_phone", "0812-3456-7890"),
-            SettingEntity("receipt_footer", "Terima kasih atas kunjungan Anda!\nFollow IG: @kopisenja.cafe"),
+            SettingEntity("receipt_footer", "Terima kasih atas kunjungan Anda!\nFollow IG: @rencanakopi.id"),
             SettingEntity("tax_percentage", "10.0"),
             SettingEntity("service_charge_percentage", "5.0"),
             SettingEntity("printer_paper_size", "58"),
@@ -98,7 +102,8 @@ object InitialDataSeeder {
                 name = "Espresso Single",
                 description = "Single shot ekstrak biji kopi arabica premium",
                 price = 15000.0,
-                costPrice = 5050.0
+                costPrice = 5050.0,
+                imageUrl = "https://images.unsplash.com/photo-1510591509098-f4fdc6d0ff04?w=600&q=80"
             )
         )
         database.recipeDao().insertRecipe(RecipeEntity(menuId = menuEspressoId, ingredientId = ingKopiId, amountRequired = 18.0))
@@ -111,7 +116,8 @@ object InitialDataSeeder {
                 name = "Iced Americano",
                 description = "Espresso double shot segar dipadu es kristal dingin",
                 price = 22000.0,
-                costPrice = 5650.0
+                costPrice = 5650.0,
+                imageUrl = "https://images.unsplash.com/photo-1517701604599-bb29b565090c?w=600&q=80"
             )
         )
         database.recipeDao().insertRecipe(RecipeEntity(menuId = menuAmericanoId, ingredientId = ingKopiId, amountRequired = 20.0))
@@ -124,7 +130,8 @@ object InitialDataSeeder {
                 name = "Kopi Susu Gula Aren",
                 description = "Menu signature: Espresso, fresh milk, dan gula aren organik",
                 price = 25000.0,
-                costPrice = 8475.0
+                costPrice = 8475.0,
+                imageUrl = "https://images.unsplash.com/photo-1461023058943-07fcbe16d735?w=600&q=80"
             )
         )
         database.recipeDao().insertRecipe(RecipeEntity(menuId = menuKopiArenId, ingredientId = ingKopiId, amountRequired = 18.0))
@@ -139,7 +146,8 @@ object InitialDataSeeder {
                 name = "Caramel Macchiato",
                 description = "Espresso creamy dengan layer susu kental & saus karamel lezat",
                 price = 28000.0,
-                costPrice = 10450.0
+                costPrice = 10450.0,
+                imageUrl = "https://images.unsplash.com/photo-1485808191679-5f86510681a2?w=600&q=80"
             )
         )
         database.recipeDao().insertRecipe(RecipeEntity(menuId = menuCaramelId, ingredientId = ingKopiId, amountRequired = 18.0))
@@ -154,7 +162,8 @@ object InitialDataSeeder {
                 name = "Uji Matcha Latte",
                 description = "Matcha murni khas Uji Jepang dipadu susu segar gurih",
                 price = 27000.0,
-                costPrice = 9650.0
+                costPrice = 9650.0,
+                imageUrl = "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?w=600&q=80"
             )
         )
         database.recipeDao().insertRecipe(RecipeEntity(menuId = menuMatchaId, ingredientId = ingMatchaId, amountRequired = 20.0))
@@ -168,7 +177,8 @@ object InitialDataSeeder {
                 name = "French Butter Croissant",
                 description = "Croissant renyah berlapis dengan aroma butter Prancis kaya",
                 price = 24000.0,
-                costPrice = 8500.0
+                costPrice = 8500.0,
+                imageUrl = "https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=600&q=80"
             )
         )
         database.recipeDao().insertRecipe(RecipeEntity(menuId = menuCroissantId, ingredientId = ingCroissantId, amountRequired = 1.0))
@@ -180,9 +190,35 @@ object InitialDataSeeder {
                 name = "Kaya Toast Brioche",
                 description = "Roti brioche panggang wangi selai srikaya pandan & butter dingin",
                 price = 20000.0,
-                costPrice = 4000.0
+                costPrice = 4000.0,
+                imageUrl = "https://images.unsplash.com/photo-1525351484163-7529414344d8?w=600&q=80"
             )
         )
         database.recipeDao().insertRecipe(RecipeEntity(menuId = menuToastId, ingredientId = ingToastId, amountRequired = 1.0))
+    }
+
+    private suspend fun backfillImagesIfMissing(database: AppDatabase) {
+        val imageMap = mapOf(
+            "Espresso Single" to "https://images.unsplash.com/photo-1510591509098-f4fdc6d0ff04?w=600&q=80",
+            "Iced Americano" to "https://images.unsplash.com/photo-1517701604599-bb29b565090c?w=600&q=80",
+            "Kopi Susu Gula Aren" to "https://images.unsplash.com/photo-1461023058943-07fcbe16d735?w=600&q=80",
+            "Caramel Macchiato" to "https://images.unsplash.com/photo-1485808191679-5f86510681a2?w=600&q=80",
+            "Uji Matcha Latte" to "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?w=600&q=80",
+            "French Butter Croissant" to "https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=600&q=80",
+            "Kaya Toast Brioche" to "https://images.unsplash.com/photo-1525351484163-7529414344d8?w=600&q=80"
+        )
+
+        // Query all menus via database query
+        val menus = database.menuDao().getMenuCount()
+        if (menus > 0) {
+            imageMap.forEach { (name, url) ->
+                // Check if menu with this name has null imageUrl
+                // Using raw update if needed
+                database.openHelper.writableDatabase.execSQL(
+                    "UPDATE menus SET imageUrl = ? WHERE name = ? AND (imageUrl IS NULL OR imageUrl = '')",
+                    arrayOf(url, name)
+                )
+            }
+        }
     }
 }

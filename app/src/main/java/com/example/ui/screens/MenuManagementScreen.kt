@@ -1,9 +1,13 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -15,18 +19,23 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.data.local.entity.CategoryEntity
 import com.example.data.local.entity.IngredientEntity
 import com.example.data.local.entity.MenuEntity
 import com.example.data.local.entity.RecipeEntity
 import com.example.ui.CafePosViewModel
 import com.example.ui.theme.*
+import com.example.util.ImageUtils
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.util.Locale
@@ -135,10 +144,40 @@ fun MenuManagementScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(14.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
+                                // Thumbnail Photo
+                                Box(
+                                    modifier = Modifier
+                                        .size(60.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(NeutralLight)
+                                ) {
+                                    if (!menu.imageUrl.isNullOrBlank()) {
+                                        AsyncImage(
+                                            model = menu.imageUrl,
+                                            contentDescription = menu.name,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    } else {
+                                        Box(
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                Icons.Filled.LocalCafe,
+                                                contentDescription = null,
+                                                tint = CoffeeBrownPrimary.copy(alpha = 0.5f),
+                                                modifier = Modifier.size(28.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(Modifier.width(12.dp))
+
                                 Column(modifier = Modifier.weight(1f)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
@@ -165,7 +204,8 @@ fun MenuManagementScreen(
                                             menu.description,
                                             fontSize = 12.sp,
                                             color = NeutralMedium,
-                                            modifier = Modifier.padding(vertical = 2.dp)
+                                            modifier = Modifier.padding(vertical = 2.dp),
+                                            maxLines = 1
                                         )
                                     }
 
@@ -332,11 +372,25 @@ fun MenuRecipeDialog(
     isNew: Boolean,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var name by remember { mutableStateOf(menu.name) }
     var description by remember { mutableStateOf(menu.description) }
     var priceText by remember { mutableStateOf(menu.price.toLong().toString()) }
     var selectedCatId by remember { mutableStateOf(menu.categoryId) }
+    var imageUrl by remember { mutableStateOf(menu.imageUrl ?: "") }
+    var showPresetDialog by remember { mutableStateOf(false) }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            val localPath = ImageUtils.saveImageFromUri(context, uri)
+            if (localPath != null) {
+                imageUrl = localPath
+            }
+        }
+    }
 
     // Recipes linked to this menu
     var currentRecipes by remember { mutableStateOf<List<RecipeEntity>>(emptyList()) }
@@ -369,6 +423,96 @@ fun MenuRecipeDialog(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // Photo Upload Card
+                item {
+                    Text("Foto Produk:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = CoffeeBrownDark)
+                    Card(
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = NeutralLight),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            // Live Preview Box
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(130.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color.White),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (imageUrl.isNotBlank()) {
+                                    AsyncImage(
+                                        model = imageUrl,
+                                        contentDescription = "Foto Produk",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                } else {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Icon(
+                                            Icons.Outlined.AddPhotoAlternate,
+                                            contentDescription = null,
+                                            tint = NeutralMedium,
+                                            modifier = Modifier.size(36.dp)
+                                        )
+                                        Text(
+                                            "Belum ada foto produk",
+                                            fontSize = 12.sp,
+                                            color = NeutralMedium,
+                                            modifier = Modifier.padding(top = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(Modifier.height(10.dp))
+
+                            // Action Buttons: Galeri & Preset
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        photoPickerLauncher.launch(
+                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                        )
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Filled.PhotoLibrary, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Upload HP", fontSize = 11.sp)
+                                }
+
+                                OutlinedButton(
+                                    onClick = { showPresetDialog = true },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Filled.Collections, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Preset Kafe", fontSize = 11.sp)
+                                }
+
+                                if (imageUrl.isNotBlank()) {
+                                    IconButton(
+                                        onClick = { imageUrl = "" },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(Icons.Outlined.Delete, contentDescription = "Hapus Foto", tint = CoffeeRed)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 item {
                     OutlinedTextField(
                         value = name,
@@ -552,7 +696,8 @@ fun MenuRecipeDialog(
                         name = name.trim(),
                         description = description.trim(),
                         price = priceText.toDoubleOrNull() ?: 0.0,
-                        costPrice = calculatedCostPrice
+                        costPrice = calculatedCostPrice,
+                        imageUrl = imageUrl.trim().ifBlank { null }
                     )
                     viewModel.saveMenu(updatedMenu, currentRecipes) {
                         onDismiss()
@@ -569,4 +714,60 @@ fun MenuRecipeDialog(
             }
         }
     )
+
+    // Preset Photo Selection Dialog
+    if (showPresetDialog) {
+        AlertDialog(
+            onDismissRequest = { showPresetDialog = false },
+            title = { Text("Pilih Foto Preset Kafe", fontWeight = FontWeight.Bold) },
+            text = {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 380.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(ImageUtils.PRESET_PHOTOS) { preset ->
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            tonalElevation = 2.dp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    imageUrl = preset.url
+                                    showPresetDialog = false
+                                }
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(8.dp)
+                            ) {
+                                AsyncImage(
+                                    model = preset.url,
+                                    contentDescription = preset.name,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .size(50.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Text(
+                                    preset.name,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 14.sp,
+                                    color = CoffeeBrownDark
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showPresetDialog = false }) {
+                    Text("Tutup")
+                }
+            }
+        )
+    }
 }

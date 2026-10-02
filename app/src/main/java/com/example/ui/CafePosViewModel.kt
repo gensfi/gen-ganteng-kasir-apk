@@ -71,6 +71,10 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
 
     // Screen change
     fun navigateTo(screen: CafeScreen) {
+        if (_currentUser.value?.role == "KASIR" && screen != CafeScreen.POS && screen != CafeScreen.PRINTER_SETTINGS) {
+            _currentScreen.value = CafeScreen.POS
+            return
+        }
         _currentScreen.value = screen
     }
 
@@ -80,6 +84,7 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
             val user = repository.getUserByPin(pin)
             if (user != null) {
                 _currentUser.value = user
+                _currentScreen.value = CafeScreen.POS
                 onResult(true, "Selamat datang, ${user.name} (${user.role})")
             } else {
                 onResult(false, "PIN salah! Silakan coba lagi.")
@@ -89,6 +94,7 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
 
     fun switchUser() {
         _currentUser.value = null
+        _currentScreen.value = CafeScreen.POS
     }
 
     // Categories & Menus

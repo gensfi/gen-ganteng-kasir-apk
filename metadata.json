@@ -1,5 +1,5 @@
 {
-  "name": "KafePOS",
+  "name": "Rencana Kopi",
   "description": "Aplikasi Kasir Cafe POS offline-first lengkap dengan manajemen stok bahan resep, printer thermal bluetooth ESC/POS, WhatsApp receipt, dan Google Sheets sync.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
