@@ -31,6 +31,7 @@ fun MainAppScaffold(viewModel: CafePosViewModel) {
     var showCartSheet by remember { mutableStateOf(false) }
     var showPaymentDialog by remember { mutableStateOf(false) }
     var showMoreMenuSheet by remember { mutableStateOf(false) }
+    var showChangePasswordDialog by remember { mutableStateOf(false) }
 
     val isKasir = currentUser?.role == "KASIR"
 
@@ -111,6 +112,13 @@ fun MainAppScaffold(viewModel: CafePosViewModel) {
 
                     NavigationRailItem(
                         selected = false,
+                        onClick = { showChangePasswordDialog = true },
+                        icon = { Icon(Icons.Filled.Key, contentDescription = "Ganti PIN") },
+                        label = { Text("Ganti PIN") }
+                    )
+
+                    NavigationRailItem(
+                        selected = false,
                         onClick = { viewModel.switchUser() },
                         icon = { Icon(Icons.Outlined.Lock, contentDescription = "Ganti Akun") },
                         label = { Text("Kunci") }
@@ -144,6 +152,13 @@ fun MainAppScaffold(viewModel: CafePosViewModel) {
                             )
 
                             if (isKasir) {
+                                NavigationBarItem(
+                                    selected = false,
+                                    onClick = { showChangePasswordDialog = true },
+                                    icon = { Icon(Icons.Filled.Key, contentDescription = null) },
+                                    label = { Text("Ganti PIN") },
+                                    modifier = Modifier.testTag("nav_change_pin")
+                                )
                                 NavigationBarItem(
                                     selected = false,
                                     onClick = { viewModel.switchUser() },
@@ -271,6 +286,14 @@ fun MainAppScaffold(viewModel: CafePosViewModel) {
         PinLoginDialog(
             viewModel = viewModel,
             onSuccess = { /* Logged in */ }
+        )
+    }
+
+    // Change Password / PIN Dialog
+    if (showChangePasswordDialog) {
+        ChangePasswordDialog(
+            viewModel = viewModel,
+            onDismiss = { showChangePasswordDialog = false }
         )
     }
 

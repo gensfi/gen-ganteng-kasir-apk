@@ -57,6 +57,7 @@ fun PosScreen(
 
     var showNotesDialogForMenu by remember { mutableStateOf<MenuEntity?>(null) }
     var itemNoteText by remember { mutableStateOf("") }
+    var showChangePasswordDialog by remember { mutableStateOf(false) }
 
     val currency = remember {
         NumberFormat.getCurrencyInstance(Locale("id", "ID")).apply { maximumFractionDigits = 0 }
@@ -83,24 +84,48 @@ fun PosScreen(
                                 )
                             )
                             Spacer(Modifier.width(8.dp))
-                            // Cashier pill
+                            // Cashier pill - Click to change password/PIN
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
-                                color = if (currentUser?.role == "ADMIN") CoffeeBrownPrimary else CoffeeAmber.copy(alpha = 0.2f),
-                                modifier = Modifier.padding(horizontal = 4.dp)
+                                color = if (currentUser?.role == "ADMIN") BrightOrangePrimary else BrightAmber.copy(alpha = 0.2f),
+                                modifier = Modifier
+                                    .padding(horizontal = 4.dp)
+                                    .clickable { showChangePasswordDialog = true }
+                                    .testTag("cashier_pill_profile")
                             ) {
-                                Text(
-                                    text = "${currentUser?.name ?: "Kasir"} (${currentUser?.role ?: "KASIR"})",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = if (currentUser?.role == "ADMIN") Color.White else CoffeeBrownDark,
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                                )
+                                ) {
+                                    Text(
+                                        text = "${currentUser?.name ?: "Kasir"} (${currentUser?.role ?: "KASIR"})",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (currentUser?.role == "ADMIN") Color.White else CoffeeBrownDark
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Icon(
+                                        Icons.Filled.Key,
+                                        contentDescription = "Ganti PIN",
+                                        tint = if (currentUser?.role == "ADMIN") Color.White else CoffeeBrownDark,
+                                        modifier = Modifier.size(11.dp)
+                                    )
+                                }
                             }
                         }
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = { showChangePasswordDialog = true },
+                        modifier = Modifier.testTag("btn_top_change_password")
+                    ) {
+                        Icon(
+                            Icons.Filled.Key,
+                            contentDescription = "Ganti PIN / Password",
+                            tint = BrightOrangePrimary
+                        )
+                    }
                     IconButton(
                         onClick = { viewModel.switchUser() },
                         modifier = Modifier.testTag("switch_user_button")
@@ -378,6 +403,13 @@ fun PosScreen(
                     Text("Batal")
                 }
             }
+        )
+    }
+
+    if (showChangePasswordDialog) {
+        ChangePasswordDialog(
+            viewModel = viewModel,
+            onDismiss = { showChangePasswordDialog = false }
         )
     }
 }

@@ -53,6 +53,8 @@ fun SettingsScreen(
 
     val allUsers by viewModel.repository.getAllUsers().collectAsState(initial = emptyList())
     var showAddUserDialog by remember { mutableStateOf(false) }
+    var userToChangePassword by remember { mutableStateOf<UserEntity?>(null) }
+    var showChangeMyPasswordDialog by remember { mutableStateOf(false) }
 
     // Backup & Restore state
     var exportedJson by remember { mutableStateOf<String?>(null) }
@@ -194,13 +196,26 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Filled.People, contentDescription = null, tint = CoffeeBrownPrimary)
+                                Icon(Icons.Filled.People, contentDescription = null, tint = BrightOrangePrimary)
                                 Spacer(Modifier.width(8.dp))
                                 Text("Pengguna & Akses PIN", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                             }
-                            if (currentUser?.role == "ADMIN") {
-                                IconButton(onClick = { showAddUserDialog = true }) {
-                                    Icon(Icons.Filled.PersonAdd, contentDescription = "Tambah Kasir", tint = CoffeeAmber)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                TextButton(
+                                    onClick = { showChangeMyPasswordDialog = true },
+                                    modifier = Modifier.testTag("btn_change_my_pin_settings")
+                                ) {
+                                    Icon(Icons.Filled.Key, contentDescription = null, modifier = Modifier.size(16.dp), tint = BrightOrangePrimary)
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Ganti PIN Saya", fontSize = 12.sp, color = BrightOrangePrimary, fontWeight = FontWeight.Bold)
+                                }
+                                if (currentUser?.role == "ADMIN") {
+                                    IconButton(
+                                        onClick = { showAddUserDialog = true },
+                                        modifier = Modifier.testTag("btn_add_user_settings")
+                                    ) {
+                                        Icon(Icons.Filled.PersonAdd, contentDescription = "Tambah Kasir", tint = BrightAmber)
+                                    }
                                 }
                             }
                         }
@@ -215,17 +230,47 @@ fun SettingsScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column {
-                                    Text(user.name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                                    Text("Username: ${user.username} • Role: ${user.role} • PIN: ${user.pin}", fontSize = 11.sp, color = NeutralMedium)
-                                }
-                                if (currentUser?.role == "ADMIN" && user.username != "admin") {
-                                    IconButton(onClick = {
-                                        coroutineScope.launch {
-                                            viewModel.repository.deleteUser(user)
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(user.name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                        Spacer(Modifier.width(6.dp))
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = if (user.role == "ADMIN") BrightOrangePrimary.copy(alpha = 0.15f) else BrightTealLight
+                                        ) {
+                                            Text(
+                                                user.role,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (user.role == "ADMIN") BrightOrangeDark else BrightTeal,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
                                         }
-                                    }) {
-                                        Icon(Icons.Outlined.Delete, contentDescription = "Hapus", tint = CoffeeRed, modifier = Modifier.size(18.dp))
+                                    }
+                                    Text("Username: ${user.username} • PIN: ${user.pin}", fontSize = 11.sp, color = NeutralMedium)
+                                }
+
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(
+                                        onClick = { userToChangePassword = user },
+                                        modifier = Modifier.testTag("btn_edit_pin_${user.id}")
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Key,
+                                            contentDescription = "Ganti PIN ${user.name}",
+                                            tint = BrightOrangePrimary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+
+                                    if (currentUser?.role == "ADMIN" && user.username != "admin") {
+                                        IconButton(onClick = {
+                                            coroutineScope.launch {
+                                                viewModel.repository.deleteUser(user)
+                                            }
+                                        }) {
+                                            Icon(Icons.Outlined.Delete, contentDescription = "Hapus", tint = CoffeeRed, modifier = Modifier.size(18.dp))
+                                        }
                                     }
                                 }
                             }
@@ -424,6 +469,26 @@ fun SettingsScreen(
             dismissButton = {
                 TextButton(onClick = { showRestoreDialog = false }) { Text("Batal") }
             }
+        )
+    }
+
+    // Change My PIN Dialog (Active Admin)
+    if (showChangeMyPasswordDialog) {
+        ChangePasswordDialog(
+            viewModel = viewModel,
+            targetUser = currentUser,
+            isAdminReset = false,
+            onDismiss = { showChangeMyPasswordDialog = false }
+        )
+    }
+
+    // Reset User PIN Dialog (Admin changing any user's PIN)
+    userToChangePassword?.let { user ->
+        ChangePasswordDialog(
+            viewModel = viewModel,
+            targetUser = user,
+            isAdminReset = (user.id != currentUser?.id),
+            onDismiss = { userToChangePassword = null }
         )
     }
 }

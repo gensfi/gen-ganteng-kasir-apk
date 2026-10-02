@@ -58,6 +58,7 @@ class CafePosRepository(
     fun getAllUsers(): Flow<List<UserEntity>> = userDao.getAllUsers()
     suspend fun getUserByPin(pin: String): UserEntity? = userDao.getUserByPin(pin)
     suspend fun insertUser(user: UserEntity): Long = userDao.insertUser(user)
+    suspend fun updateUser(user: UserEntity) = userDao.updateUser(user)
     suspend fun deleteUser(user: UserEntity) = userDao.deleteUser(user)
 
     // --- Categories & Menu ---

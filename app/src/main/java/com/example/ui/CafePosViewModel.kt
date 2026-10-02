@@ -97,6 +97,75 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
         _currentScreen.value = CafeScreen.POS
     }
 
+    // Change Password / PIN for all roles
+    fun changeUserPassword(
+        oldPin: String,
+        newPin: String,
+        confirmPin: String,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val user = _currentUser.value
+            if (user == null) {
+                onResult(false, "Sesi pengguna tidak valid. Silakan login kembali.")
+                return@launch
+            }
+
+            if (user.pin != oldPin.trim()) {
+                onResult(false, "PIN / Password lama tidak sesuai!")
+                return@launch
+            }
+
+            val trimmedNew = newPin.trim()
+            if (trimmedNew.length < 4) {
+                onResult(false, "PIN baru minimal 4 angka / karakter!")
+                return@launch
+            }
+
+            if (trimmedNew != confirmPin.trim()) {
+                onResult(false, "Konfirmasi PIN baru tidak sama!")
+                return@launch
+            }
+
+            if (trimmedNew == oldPin.trim()) {
+                onResult(false, "PIN baru tidak boleh sama dengan PIN lama!")
+                return@launch
+            }
+
+            val updatedUser = user.copy(pin = trimmedNew)
+            repository.updateUser(updatedUser)
+            _currentUser.value = updatedUser
+            onResult(true, "PIN / Password untuk akun ${user.name} berhasil diperbarui!")
+        }
+    }
+
+    // Admin can reset any user's PIN
+    fun adminResetUserPassword(
+        targetUser: UserEntity,
+        newPin: String,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            if (_currentUser.value?.role != "ADMIN") {
+                onResult(false, "Hanya Owner / Admin yang dapat mereset PIN staf lain!")
+                return@launch
+            }
+
+            val trimmedNew = newPin.trim()
+            if (trimmedNew.length < 4) {
+                onResult(false, "PIN baru minimal 4 angka / karakter!")
+                return@launch
+            }
+
+            val updatedUser = targetUser.copy(pin = trimmedNew)
+            repository.updateUser(updatedUser)
+            if (_currentUser.value?.id == targetUser.id) {
+                _currentUser.value = updatedUser
+            }
+            onResult(true, "PIN untuk ${targetUser.name} berhasil diperbarui ke: $trimmedNew")
+        }
+    }
+
     // Categories & Menus
     val categories: StateFlow<List<CategoryEntity>> = repository.getAllCategories()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
