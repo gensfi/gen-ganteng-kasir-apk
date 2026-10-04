@@ -162,6 +162,22 @@ class BluetoothPrinterHelper(private val context: Context) {
         }
     }
 
+    suspend fun printCustomText(text: String): Result<Unit> = withContext(Dispatchers.IO) {
+        val stream = outputStream ?: return@withContext Result.failure(Exception("Printer belum terhubung."))
+        try {
+            val bytes = mutableListOf<Byte>()
+            bytes.addAll(CMD_INIT.toList())
+            bytes.addAll(CMD_ALIGN_LEFT.toList())
+            bytes.addAll(text.toByteArray(Charsets.ISO_8859_1).toList())
+            bytes.addAll("\n\n\n\n".toByteArray(Charsets.ISO_8859_1).toList())
+            stream.write(bytes.toByteArray())
+            stream.flush()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun printTransactionReceipt(
         transaction: TransactionEntity,
         items: List<TransactionItemEntity>,

@@ -46,9 +46,26 @@ fun InventoryScreen(
         NumberFormat.getCurrencyInstance(Locale("id", "ID")).apply { maximumFractionDigits = 0 }
     }
 
-    val filteredList = remember(ingredients, searchQuery) {
-        if (searchQuery.isBlank()) ingredients
+    val sortedList = remember(ingredients, searchQuery) {
+        val base = if (searchQuery.isBlank()) ingredients
         else ingredients.filter { it.name.contains(searchQuery, ignoreCase = true) }
+
+        // Sort from UN-SAFE (Habis/Kritis/Menipis) to SAFE (Stok Cukup)
+        base.sortedWith(
+            compareBy<IngredientEntity> { ing ->
+                when {
+                    ing.currentStock <= 0.0 -> 0 // Tier 0: HABIS TOTAL (Paling Tidak Aman)
+                    ing.currentStock <= ing.minStock -> 1 // Tier 1: TIDAK AMAN (Kritis / Di Bawah Min)
+                    ing.currentStock <= ing.minStock * 1.5 -> 2 // Tier 2: WASPADA (Mendekati Batas Min)
+                    else -> 3 // Tier 3: AMAN (Stok Cukup & Terjaga)
+                }
+            }.thenBy { ing ->
+                // Within same tier, lowest stock ratio first
+                if (ing.minStock <= 0.0) ing.currentStock else (ing.currentStock / ing.minStock)
+            }.thenBy { ing ->
+                ing.name
+            }
+        )
     }
 
     Scaffold(
@@ -131,23 +148,24 @@ fun InventoryScreen(
                     .padding(horizontal = 16.dp, vertical = 4.dp)
             )
 
-            // Stock reduction notice
+            // Stock reduction & sorting notice
             Surface(
                 color = PrimaryContainer.copy(alpha = 0.5f),
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
             ) {
                 Row(
                     modifier = Modifier.padding(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Filled.AutoMode, contentDescription = null, tint = CoffeeBrownDark, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Filled.Sort, contentDescription = null, tint = CoffeeBrownDark, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        "Otomatis berkurang saat transaksi POS berhasil berdasarkan resep.",
-                        fontSize = 11.sp,
+                        "Urutan: 🚨 Tidak Aman (Kritis/Habis) ➔ ⚠️ Waspada ➔ ✅ Aman",
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Bold,
                         color = CoffeeBrownDark
                     )
                 }
@@ -159,13 +177,20 @@ fun InventoryScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                items(filteredList) { ing ->
-                    val isLow = ing.currentStock <= ing.minStock
+                items(sortedList, key = { it.id }) { ing ->
                     val isOut = ing.currentStock <= 0.0
+                    val isUnsafe = ing.currentStock <= ing.minStock
+                    val isWarning = !isUnsafe && ing.currentStock <= ing.minStock * 1.5
 
                     Card(
                         shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        colors = CardDefaults.cardColors(
+                            containerColor = when {
+                                isUnsafe -> CoffeeRedLight.copy(alpha = 0.35f)
+                                isWarning -> CoffeeOrangeLight.copy(alpha = 0.25f)
+                                else -> MaterialTheme.colorScheme.surface
+                            }
+                        ),
                         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                         modifier = Modifier.fillMaxWidth().testTag("ingredient_item_${ing.id}")
                     ) {
@@ -191,20 +216,23 @@ fun InventoryScreen(
                                 Surface(
                                     shape = RoundedCornerShape(8.dp),
                                     color = when {
-                                        isOut -> CoffeeRedLight
-                                        isLow -> CoffeeOrangeLight
+                                        isOut -> BrightRed
+                                        isUnsafe -> CoffeeRedLight
+                                        isWarning -> CoffeeOrangeLight
                                         else -> CoffeeGreenLight
                                     }
                                 ) {
                                     Text(
                                         text = when {
-                                            isOut -> "HABIS"
-                                            isLow -> "MENIPIS"
-                                            else -> "AMAN"
+                                            isOut -> "🚨 HABIS"
+                                            isUnsafe -> "🚨 TIDAK AMAN"
+                                            isWarning -> "⚠️ WASPADA"
+                                            else -> "✅ AMAN"
                                         },
                                         color = when {
-                                            isOut -> CoffeeRed
-                                            isLow -> CoffeeOrange
+                                            isOut -> Color.White
+                                            isUnsafe -> CoffeeRed
+                                            isWarning -> CoffeeOrange
                                             else -> CoffeeGreen
                                         },
                                         fontWeight = FontWeight.Bold,
@@ -223,7 +251,7 @@ fun InventoryScreen(
 
                             LinearProgressIndicator(
                                 progress = { percent },
-                                color = if (isLow) CoffeeOrange else CoffeeGreen,
+                                color = if (isUnsafe) CoffeeRed else if (isWarning) CoffeeOrange else CoffeeGreen,
                                 trackColor = NeutralBorder,
                                 modifier = Modifier.fillMaxWidth().height(6.dp)
                             )
@@ -239,7 +267,7 @@ fun InventoryScreen(
                                     text = "Stok: ${String.format(Locale.US, "%.1f", ing.currentStock)} ${ing.unit} (Min: ${ing.minStock} ${ing.unit})",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = if (isLow) CoffeeRed else NeutralDark
+                                    color = if (isUnsafe) CoffeeRed else if (isWarning) CoffeeOrange else NeutralDark
                                 )
 
                                 Row {

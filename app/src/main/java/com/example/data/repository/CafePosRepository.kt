@@ -10,6 +10,7 @@ import com.example.data.local.entity.SettingEntity
 import com.example.data.local.entity.TransactionEntity
 import com.example.data.local.entity.TransactionItemEntity
 import com.example.data.local.entity.UserEntity
+import com.example.data.local.entity.VoucherEntity
 import com.example.data.remote.GoogleSheetsSyncService
 import com.example.data.remote.SyncResult
 import kotlinx.coroutines.CoroutineScope
@@ -53,6 +54,15 @@ class CafePosRepository(
     private val recipeDao = database.recipeDao()
     private val transactionDao = database.transactionDao()
     private val settingDao = database.settingDao()
+    private val voucherDao = database.voucherDao()
+
+    // --- Vouchers & Promo ---
+    fun getAllVouchers(): Flow<List<VoucherEntity>> = voucherDao.getAllVouchers()
+    suspend fun getVoucherByCode(code: String): VoucherEntity? = voucherDao.getVoucherByCode(code.trim().uppercase())
+    suspend fun insertVoucher(voucher: VoucherEntity) = voucherDao.insertVoucher(voucher)
+    suspend fun updateVoucher(voucher: VoucherEntity) = voucherDao.updateVoucher(voucher)
+    suspend fun deleteVoucher(code: String) = voucherDao.deleteVoucher(code)
+    suspend fun incrementVoucherUsed(code: String) = voucherDao.incrementUsedCount(code)
 
     // --- Users & Auth ---
     fun getAllUsers(): Flow<List<UserEntity>> = userDao.getAllUsers()
@@ -167,6 +177,10 @@ class CafePosRepository(
     fun getAllTransactions(): Flow<List<TransactionEntity>> = transactionDao.getAllTransactions()
     suspend fun getTransactionItems(transactionId: String): List<TransactionItemEntity> =
         transactionDao.getTransactionItems(transactionId)
+    suspend fun getAllTransactionItems(): List<TransactionItemEntity> =
+        transactionDao.getAllTransactionItems()
+    suspend fun getTransactionsBetween(startDate: Long, endDate: Long): List<TransactionEntity> =
+        transactionDao.getTransactionsBetween(startDate, endDate)
 
     suspend fun getSalesReports(startDate: Long, endDate: Long): ReportSummary = withContext(Dispatchers.IO) {
         val transactions = transactionDao.getTransactionsBetween(startDate, endDate)

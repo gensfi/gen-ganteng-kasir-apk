@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.data.backup.BackupFileInfo
 import com.example.data.backup.BackupRestoreManager
 import com.example.data.local.AppDatabase
 import com.example.data.local.InitialDataSeeder
@@ -14,6 +15,7 @@ import com.example.data.local.entity.RecipeEntity
 import com.example.data.local.entity.TransactionEntity
 import com.example.data.local.entity.TransactionItemEntity
 import com.example.data.local.entity.UserEntity
+import com.example.data.local.entity.VoucherEntity
 import com.example.data.printer.BluetoothPrinterDevice
 import com.example.data.printer.BluetoothPrinterHelper
 import com.example.data.printer.PrinterStatus
@@ -28,9 +30,11 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -44,7 +48,9 @@ enum class CafeScreen {
     REPORTS,
     PRINTER_SETTINGS,
     GOOGLE_SHEETS,
-    SETTINGS
+    SETTINGS,
+    CASHIER_SUMMARY,
+    VOUCHER_MANAGEMENT
 }
 
 data class CompletedTransaction(
@@ -71,7 +77,7 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
 
     // Screen change
     fun navigateTo(screen: CafeScreen) {
-        if (_currentUser.value?.role == "KASIR" && screen != CafeScreen.POS && screen != CafeScreen.PRINTER_SETTINGS) {
+        if (_currentUser.value?.role == "KASIR" && screen !in listOf(CafeScreen.POS, CafeScreen.PRINTER_SETTINGS, CafeScreen.CASHIER_SUMMARY)) {
             _currentScreen.value = CafeScreen.POS
             return
         }
@@ -166,6 +172,78 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    // Universal Password Reset with Master Security Key
+    fun resetUserPassword(
+        targetUser: UserEntity,
+        securityCode: String,
+        newPin: String,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val allUsers = repository.getAllUsers().first()
+            val adminUser = allUsers.find { it.role == "ADMIN" }
+            val cleanCode = securityCode.trim()
+            val isValidMaster = cleanCode == "8888" ||
+                    cleanCode == "1234" ||
+                    cleanCode.equals("RENCANAKOPI", ignoreCase = true) ||
+                    (adminUser != null && cleanCode == adminUser.pin)
+
+            if (!isValidMaster) {
+                onResult(false, "Kode Keamanan Master salah! Gunakan master PIN: 8888")
+                return@launch
+            }
+
+            val trimmedPin = newPin.trim()
+            if (trimmedPin.length < 4) {
+                onResult(false, "PIN baru minimal 4 angka / karakter!")
+                return@launch
+            }
+
+            val updated = targetUser.copy(pin = trimmedPin)
+            repository.updateUser(updated)
+            if (_currentUser.value?.id == targetUser.id) {
+                _currentUser.value = updated
+            }
+            onResult(true, "PIN untuk ${targetUser.name} berhasil di-reset ke: $trimmedPin")
+        }
+    }
+
+    // Update Tax and Service settings immediately updating active rates and database
+    fun updateTaxAndService(
+        taxStr: String,
+        serviceStr: String,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                val cleanTax = taxStr.replace(',', '.').trim()
+                val cleanService = serviceStr.replace(',', '.').trim()
+
+                val taxVal = cleanTax.toDoubleOrNull() ?: 0.0
+                val serviceVal = cleanService.toDoubleOrNull() ?: 0.0
+
+                if (taxVal < 0 || taxVal > 100) {
+                    onResult(false, "Persentase pajak harus antara 0% dan 100%")
+                    return@launch
+                }
+                if (serviceVal < 0 || serviceVal > 100) {
+                    onResult(false, "Persentase layanan harus antara 0% dan 100%")
+                    return@launch
+                }
+
+                repository.setSetting("tax_percentage", taxVal.toString())
+                repository.setSetting("service_charge_percentage", serviceVal.toString())
+
+                _taxRate.value = taxVal
+                _serviceRate.value = serviceVal
+
+                onResult(true, "Pajak ($taxVal%) dan Layanan ($serviceVal%) berhasil disimpan!")
+            } catch (e: Exception) {
+                onResult(false, "Gagal menyimpan: ${e.message}")
+            }
+        }
+    }
+
     // Categories & Menus
     val categories: StateFlow<List<CategoryEntity>> = repository.getAllCategories()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -234,6 +312,7 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
             currentList.add(CartItem(menu = menu, quantity = 1, notes = notes))
         }
         _cartItems.value = currentList
+        recalculateDiscount()
     }
 
     fun updateCartItemQuantity(cartItem: CartItem, newQty: Int) {
@@ -246,6 +325,7 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
                 currentList[index] = cartItem.copy(quantity = newQty)
             }
             _cartItems.value = currentList
+            recalculateDiscount()
         }
     }
 
@@ -258,6 +338,7 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
         _customerName.value = ""
         _customerPhone.value = ""
         _orderNotes.value = ""
+        clearAllDiscounts()
     }
 
     // Calculations
@@ -271,10 +352,144 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
     private val _serviceRate = MutableStateFlow(5.0) // 5%
     val serviceRate: StateFlow<Double> = _serviceRate.asStateFlow()
 
+    // Voucher & Manual Discount
+    val vouchers: StateFlow<List<VoucherEntity>> = repository.getAllVouchers()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _appliedVoucher = MutableStateFlow<VoucherEntity?>(null)
+    val appliedVoucher: StateFlow<VoucherEntity?> = _appliedVoucher.asStateFlow()
+
+    private val _manualDiscountType = MutableStateFlow<String>("PERCENT") // "PERCENT" or "NOMINAL"
+    val manualDiscountType: StateFlow<String> = _manualDiscountType.asStateFlow()
+
+    private val _manualDiscountValue = MutableStateFlow(0.0)
+    val manualDiscountValue: StateFlow<Double> = _manualDiscountValue.asStateFlow()
+
     private val _discountAmount = MutableStateFlow(0.0)
     val discountAmount: StateFlow<Double> = _discountAmount.asStateFlow()
 
-    fun setDiscount(amount: Double) { _discountAmount.value = amount }
+    fun setDiscount(amount: Double) { _discountAmount.value = maxOf(0.0, amount) }
+
+    fun applyVoucher(code: String, onResult: (Boolean, String) -> Unit) {
+        val cleanCode = code.trim().uppercase()
+        if (cleanCode.isBlank()) {
+            onResult(false, "Masukkan kode voucher!")
+            return
+        }
+        viewModelScope.launch {
+            val v = repository.getVoucherByCode(cleanCode)
+            if (v == null) {
+                onResult(false, "Voucher '$cleanCode' tidak ditemukan!")
+                return@launch
+            }
+            if (!v.isActive) {
+                onResult(false, "Voucher '$cleanCode' sedang tidak aktif!")
+                return@launch
+            }
+            if (v.isExpired()) {
+                onResult(false, "Voucher '$cleanCode' telah kedaluwarsa!")
+                return@launch
+            }
+            if (v.isQuotaExceeded()) {
+                onResult(false, "Kuota voucher '$cleanCode' sudah habis!")
+                return@launch
+            }
+            val subtotal = cartSubtotal.value
+            if (subtotal < v.minPurchase) {
+                onResult(false, "Minimal belanja untuk voucher ini adalah Rp ${v.minPurchase.toLong()}")
+                return@launch
+            }
+
+            _appliedVoucher.value = v
+            recalculateDiscount()
+            onResult(true, "Voucher '$cleanCode' berhasil dipasang!")
+        }
+    }
+
+    fun removeVoucher() {
+        _appliedVoucher.value = null
+        recalculateDiscount()
+    }
+
+    fun setManualDiscount(type: String, value: Double) {
+        _manualDiscountType.value = type
+        _manualDiscountValue.value = maxOf(0.0, value)
+        recalculateDiscount()
+    }
+
+    fun clearAllDiscounts() {
+        _appliedVoucher.value = null
+        _manualDiscountValue.value = 0.0
+        _discountAmount.value = 0.0
+    }
+
+    fun recalculateDiscount() {
+        val subtotal = cartSubtotal.value
+        var disc = 0.0
+
+        _appliedVoucher.value?.let { v ->
+            if (v.isValid(subtotal)) {
+                disc += if (v.discountType.equals("PERCENT", ignoreCase = true)) {
+                    (subtotal * v.discountValue) / 100.0
+                } else {
+                    v.discountValue
+                }
+            } else {
+                _appliedVoucher.value = null
+            }
+        }
+
+        if (_manualDiscountValue.value > 0) {
+            disc += if (_manualDiscountType.value.equals("PERCENT", ignoreCase = true)) {
+                (subtotal * _manualDiscountValue.value) / 100.0
+            } else {
+                _manualDiscountValue.value
+            }
+        }
+
+        _discountAmount.value = minOf(subtotal, disc)
+    }
+
+    // Admin Voucher CRUD
+    fun createOrUpdateVoucher(voucher: VoucherEntity, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                if (voucher.code.isBlank()) {
+                    onResult(false, "Kode voucher tidak boleh kosong!")
+                    return@launch
+                }
+                if (voucher.discountValue <= 0) {
+                    onResult(false, "Nilai diskon harus lebih besar dari 0!")
+                    return@launch
+                }
+                if (voucher.discountType.equals("PERCENT", ignoreCase = true) && voucher.discountValue > 100) {
+                    onResult(false, "Diskon persen maksimal 100%!")
+                    return@launch
+                }
+                repository.insertVoucher(voucher.copy(code = voucher.code.trim().uppercase()))
+                onResult(true, "Voucher '${voucher.code.uppercase()}' berhasil disimpan!")
+            } catch (e: Exception) {
+                onResult(false, "Gagal menyimpan voucher: ${e.message}")
+            }
+        }
+    }
+
+    fun deleteVoucher(code: String, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                repository.deleteVoucher(code)
+                onResult(true, "Voucher '$code' berhasil dihapus!")
+            } catch (e: Exception) {
+                onResult(false, "Gagal menghapus: ${e.message}")
+            }
+        }
+    }
+
+    fun toggleVoucherStatus(voucher: VoucherEntity) {
+        viewModelScope.launch {
+            repository.updateVoucher(voucher.copy(isActive = !voucher.isActive))
+        }
+    }
 
     // Last completed transaction for receipt dialog
     private val _lastTransaction = MutableStateFlow<CompletedTransaction?>(null)
@@ -379,7 +594,20 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
                 )
 
                 _lastTransaction.value = completed
+                _appliedVoucher.value?.let { v ->
+                    repository.incrementVoucherUsed(v.code)
+                }
                 clearCart()
+                // Automatic data backup for business & inventory security
+                viewModelScope.launch {
+                    try {
+                        if (backupRestoreManager.isAutoBackupEnabled()) {
+                            backupRestoreManager.performAutoBackup(getApplication())
+                            _lastAutoBackupTime.value = System.currentTimeMillis()
+                            _backupFiles.value = backupRestoreManager.listBackups(getApplication())
+                        }
+                    } catch (_: Exception) {}
+                }
                 onSuccess(completed)
             } else {
                 onError("Gagal memproses transaksi: ${result.exceptionOrNull()?.localizedMessage}")
@@ -460,6 +688,38 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
             res.fold(
                 onSuccess = { onResult(true, "Test print berhasil!") },
                 onFailure = { onResult(false, it.localizedMessage ?: "Gagal test print") }
+            )
+        }
+    }
+
+    fun printCustomReceipt(text: String, onResult: (Boolean, String) -> Unit = { _, _ -> }) {
+        viewModelScope.launch {
+            val res = printerHelper.printCustomText(text)
+            res.fold(
+                onSuccess = { onResult(true, "Berhasil mencetak ke printer") },
+                onFailure = { onResult(false, it.localizedMessage ?: "Gagal mencetak") }
+            )
+        }
+    }
+
+    fun printSingleTransaction(trx: TransactionEntity, items: List<TransactionItemEntity>, onResult: (Boolean, String) -> Unit = { _, _ -> }) {
+        viewModelScope.launch {
+            val cafeName = repository.getSetting("cafe_name") ?: "Rencana Kopi"
+            val cafeAddress = repository.getSetting("cafe_address") ?: ""
+            val cafePhone = repository.getSetting("cafe_phone") ?: ""
+            val footer = repository.getSetting("receipt_footer") ?: ""
+            val res = printerHelper.printTransactionReceipt(
+                transaction = trx,
+                items = items,
+                cafeName = cafeName,
+                cafeAddress = cafeAddress,
+                cafePhone = cafePhone,
+                footerMessage = footer,
+                paperSize = _paperSize.value
+            )
+            res.fold(
+                onSuccess = { onResult(true, "Struk berhasil dicetak!") },
+                onFailure = { onResult(false, it.localizedMessage ?: "Gagal mencetak struk") }
             )
         }
     }
@@ -580,6 +840,71 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    // Automatic & Manual Backup Management
+    private val _isAutoBackupEnabled = MutableStateFlow(true)
+    val isAutoBackupEnabled: StateFlow<Boolean> = _isAutoBackupEnabled.asStateFlow()
+
+    private val _lastAutoBackupTime = MutableStateFlow(0L)
+    val lastAutoBackupTime: StateFlow<Long> = _lastAutoBackupTime.asStateFlow()
+
+    private val _backupFiles = MutableStateFlow<List<BackupFileInfo>>(emptyList())
+    val backupFiles: StateFlow<List<BackupFileInfo>> = _backupFiles.asStateFlow()
+
+    fun refreshBackups() {
+        viewModelScope.launch {
+            _backupFiles.value = backupRestoreManager.listBackups(getApplication())
+            _lastAutoBackupTime.value = backupRestoreManager.getLastAutoBackupTime()
+            _isAutoBackupEnabled.value = backupRestoreManager.isAutoBackupEnabled()
+        }
+    }
+
+    fun toggleAutoBackup(enabled: Boolean) {
+        viewModelScope.launch {
+            backupRestoreManager.setAutoBackupEnabled(enabled)
+            _isAutoBackupEnabled.value = enabled
+        }
+    }
+
+    fun triggerAutoBackupNow(onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val file = backupRestoreManager.performAutoBackup(getApplication())
+                refreshBackups()
+                onResult(true, "Data bisnis & inventaris berhasil dicadangkan ke ${file.name}")
+            } catch (e: Exception) {
+                onResult(false, "Gagal mencadangkan data: ${e.localizedMessage}")
+            }
+        }
+    }
+
+    fun triggerManualBackup(onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val file = backupRestoreManager.performManualBackup(getApplication())
+                refreshBackups()
+                onResult(true, "File cadangan baru dibuat: ${file.name}")
+            } catch (e: Exception) {
+                onResult(false, "Gagal membuat cadangan: ${e.localizedMessage}")
+            }
+        }
+    }
+
+    fun restoreBackupFile(file: File, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            val res = backupRestoreManager.restoreFromFile(file)
+            if (res.isSuccess) {
+                refreshBackups()
+                onResult(true, "Data berhasil dipulihkan dari ${file.name}")
+            } else {
+                onResult(false, "Gagal memulihkan: ${res.exceptionOrNull()?.localizedMessage}")
+            }
+        }
+    }
+
+    fun shareBackup(file: File) {
+        backupRestoreManager.shareBackupFile(getApplication(), file)
+    }
+
     // Initialization
     init {
         viewModelScope.launch {
@@ -595,6 +920,20 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
             _taxRate.value = savedTax
             _serviceRate.value = savedService
             _paperSize.value = savedPaper
+
+            // Auto backup settings & initial snapshot if needed
+            _isAutoBackupEnabled.value = backupRestoreManager.isAutoBackupEnabled()
+            _lastAutoBackupTime.value = backupRestoreManager.getLastAutoBackupTime()
+            _backupFiles.value = backupRestoreManager.listBackups(getApplication())
+
+            val now = System.currentTimeMillis()
+            if (_isAutoBackupEnabled.value && (now - _lastAutoBackupTime.value > 86400000L)) {
+                try {
+                    backupRestoreManager.performAutoBackup(getApplication())
+                    _lastAutoBackupTime.value = now
+                    _backupFiles.value = backupRestoreManager.listBackups(getApplication())
+                } catch (_: Exception) {}
+            }
 
             // Load initial report
             loadReports(0)

@@ -6,8 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Backspace
-import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,6 +30,7 @@ fun PinLoginDialog(
 ) {
     var enteredPin by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var showResetPasswordDialog by remember { mutableStateOf(false) }
 
     Dialog(
         onDismissRequest = { /* force login */ },
@@ -183,7 +183,34 @@ fun PinLoginDialog(
                     }
                 }
 
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(12.dp))
+
+                // Reset Password Button
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    TextButton(
+                        onClick = { showResetPasswordDialog = true },
+                        modifier = Modifier.testTag("btn_forgot_reset_pin")
+                    ) {
+                        Icon(
+                            Icons.Filled.Key,
+                            contentDescription = null,
+                            tint = BrightOrangePrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            "Lupa PIN? Reset Password",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = BrightOrangePrimary
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
 
                 // Demo hint
                 Surface(
@@ -201,5 +228,12 @@ fun PinLoginDialog(
                 }
             }
         }
+    }
+
+    if (showResetPasswordDialog) {
+        ResetPasswordDialog(
+            viewModel = viewModel,
+            onDismiss = { showResetPasswordDialog = false }
+        )
     }
 }

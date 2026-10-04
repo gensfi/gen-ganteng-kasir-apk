@@ -4,8 +4,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -13,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -23,6 +26,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.ui.CafePosViewModel
 import com.example.ui.theme.*
+import com.example.util.SoundHelper
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -32,6 +36,7 @@ fun PaymentDialog(
     onDismiss: () -> Unit,
     onPaymentSuccess: () -> Unit
 ) {
+    val context = LocalContext.current
     val subtotal by viewModel.cartSubtotal.collectAsState()
     val taxRate by viewModel.taxRate.collectAsState()
     val serviceRate by viewModel.serviceRate.collectAsState()
@@ -59,11 +64,13 @@ fun PaymentDialog(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .widthIn(max = 480.dp)
+                .padding(horizontal = 12.dp, vertical = 16.dp)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(20.dp)
             ) {
                 // Header
@@ -268,6 +275,7 @@ fun PaymentDialog(
                         }
                         isProcessing = true
                         errorMessage = null
+                        SoundHelper.playCashChime(context)
 
                         viewModel.processPayment(
                             paymentMethod = selectedTab,

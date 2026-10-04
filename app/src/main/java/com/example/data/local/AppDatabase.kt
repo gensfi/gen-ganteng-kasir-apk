@@ -11,6 +11,7 @@ import com.example.data.local.dao.RecipeDao
 import com.example.data.local.dao.SettingDao
 import com.example.data.local.dao.TransactionDao
 import com.example.data.local.dao.UserDao
+import com.example.data.local.dao.VoucherDao
 import com.example.data.local.entity.CategoryEntity
 import com.example.data.local.entity.IngredientEntity
 import com.example.data.local.entity.MenuEntity
@@ -19,6 +20,7 @@ import com.example.data.local.entity.SettingEntity
 import com.example.data.local.entity.TransactionEntity
 import com.example.data.local.entity.TransactionItemEntity
 import com.example.data.local.entity.UserEntity
+import com.example.data.local.entity.VoucherEntity
 
 @Database(
     entities = [
@@ -29,9 +31,10 @@ import com.example.data.local.entity.UserEntity
         RecipeEntity::class,
         TransactionEntity::class,
         TransactionItemEntity::class,
-        SettingEntity::class
+        SettingEntity::class,
+        VoucherEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -43,6 +46,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun recipeDao(): RecipeDao
     abstract fun transactionDao(): TransactionDao
     abstract fun settingDao(): SettingDao
+    abstract fun voucherDao(): VoucherDao
 
     companion object {
         @Volatile

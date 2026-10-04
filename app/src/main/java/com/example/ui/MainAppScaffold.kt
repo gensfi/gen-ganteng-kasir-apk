@@ -75,6 +75,13 @@ fun MainAppScaffold(viewModel: CafePosViewModel) {
                         label = { Text("Printer") }
                     )
 
+                    NavigationRailItem(
+                        selected = currentScreen == CafeScreen.CASHIER_SUMMARY,
+                        onClick = { viewModel.navigateTo(CafeScreen.CASHIER_SUMMARY) },
+                        icon = { Icon(Icons.Filled.AccountBalanceWallet, contentDescription = null) },
+                        label = { Text("Rekap Kas") }
+                    )
+
                     if (!isKasir) {
                         NavigationRailItem(
                             selected = currentScreen == CafeScreen.INVENTORY,
@@ -105,6 +112,12 @@ fun MainAppScaffold(viewModel: CafePosViewModel) {
                             onClick = { viewModel.navigateTo(CafeScreen.SETTINGS) },
                             icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
                             label = { Text("Setting") }
+                        )
+                        NavigationRailItem(
+                            selected = currentScreen == CafeScreen.VOUCHER_MANAGEMENT,
+                            onClick = { viewModel.navigateTo(CafeScreen.VOUCHER_MANAGEMENT) },
+                            icon = { Icon(Icons.Filled.ConfirmationNumber, contentDescription = null) },
+                            label = { Text("Voucher") }
                         )
                     }
 
@@ -153,17 +166,24 @@ fun MainAppScaffold(viewModel: CafePosViewModel) {
 
                             if (isKasir) {
                                 NavigationBarItem(
+                                    selected = currentScreen == CafeScreen.CASHIER_SUMMARY,
+                                    onClick = { viewModel.navigateTo(CafeScreen.CASHIER_SUMMARY) },
+                                    icon = { Icon(Icons.Filled.AccountBalanceWallet, contentDescription = null) },
+                                    label = { Text("Rekap", maxLines = 1, fontSize = 11.sp) },
+                                    modifier = Modifier.testTag("nav_cashier_summary")
+                                )
+                                NavigationBarItem(
                                     selected = false,
                                     onClick = { showChangePasswordDialog = true },
                                     icon = { Icon(Icons.Filled.Key, contentDescription = null) },
-                                    label = { Text("Ganti PIN") },
+                                    label = { Text("PIN", maxLines = 1, fontSize = 11.sp) },
                                     modifier = Modifier.testTag("nav_change_pin")
                                 )
                                 NavigationBarItem(
                                     selected = false,
                                     onClick = { viewModel.switchUser() },
                                     icon = { Icon(Icons.Outlined.Lock, contentDescription = null) },
-                                    label = { Text("Ganti Akun") },
+                                    label = { Text("Akun", maxLines = 1, fontSize = 11.sp) },
                                     modifier = Modifier.testTag("nav_switch_user")
                                 )
                             } else {
@@ -208,7 +228,7 @@ fun MainAppScaffold(viewModel: CafePosViewModel) {
                         .fillMaxSize()
                         .padding(innerPadding)
                 ) {
-                    if (isKasir && currentScreen !in listOf(CafeScreen.POS, CafeScreen.PRINTER_SETTINGS)) {
+                    if (isKasir && currentScreen !in listOf(CafeScreen.POS, CafeScreen.PRINTER_SETTINGS, CafeScreen.CASHIER_SUMMARY)) {
                         AccessDeniedScreen(
                             onLoginAdmin = { viewModel.switchUser() }
                         )
@@ -239,6 +259,14 @@ fun MainAppScaffold(viewModel: CafePosViewModel) {
                                 onBack = { viewModel.navigateTo(CafeScreen.POS) }
                             )
                             CafeScreen.SETTINGS -> SettingsScreen(
+                                viewModel = viewModel,
+                                onBack = { viewModel.navigateTo(CafeScreen.POS) }
+                            )
+                            CafeScreen.CASHIER_SUMMARY -> CashierSummaryScreen(
+                                viewModel = viewModel,
+                                onBack = { viewModel.navigateTo(CafeScreen.POS) }
+                            )
+                            CafeScreen.VOUCHER_MANAGEMENT -> VoucherManagementScreen(
                                 viewModel = viewModel,
                                 onBack = { viewModel.navigateTo(CafeScreen.POS) }
                             )
@@ -343,6 +371,16 @@ fun MainAppScaffold(viewModel: CafePosViewModel) {
                     modifier = Modifier.clickable {
                         showMoreMenuSheet = false
                         viewModel.navigateTo(CafeScreen.SETTINGS)
+                    }
+                )
+
+                ListItem(
+                    headlineContent = { Text("Manajemen Voucher & Promo") },
+                    supportingContent = { Text("Kelola kode kupon diskon, kuota & tanggal kedaluwarsa") },
+                    leadingContent = { Icon(Icons.Filled.ConfirmationNumber, contentDescription = null, tint = BrightOrangePrimary) },
+                    modifier = Modifier.clickable {
+                        showMoreMenuSheet = false
+                        viewModel.navigateTo(CafeScreen.VOUCHER_MANAGEMENT)
                     }
                 )
 

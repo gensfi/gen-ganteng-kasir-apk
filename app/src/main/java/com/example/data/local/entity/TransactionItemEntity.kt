@@ -27,4 +27,6 @@ data class TransactionItemEntity(
     val costPrice: Double = 0.0,
     val quantity: Int,
     val itemNotes: String? = null
-)
+) {
+    val subtotal: Double get() = price * quantity
+}

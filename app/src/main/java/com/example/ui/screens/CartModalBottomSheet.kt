@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -16,6 +17,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.CafePosViewModel
@@ -35,6 +37,14 @@ fun CartModalBottomSheet(
     val taxRate by viewModel.taxRate.collectAsState()
     val serviceRate by viewModel.serviceRate.collectAsState()
     val discountAmount by viewModel.discountAmount.collectAsState()
+
+    val appliedVoucher by viewModel.appliedVoucher.collectAsState()
+    val manualDiscountType by viewModel.manualDiscountType.collectAsState()
+    val manualDiscountValue by viewModel.manualDiscountValue.collectAsState()
+
+    var voucherInput by remember { mutableStateOf("") }
+    var voucherMsg by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+    var customDiscountInput by remember { mutableStateOf("") }
 
     val customerName by viewModel.customerName.collectAsState()
     val customerPhone by viewModel.customerPhone.collectAsState()
@@ -58,7 +68,9 @@ fun CartModalBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.88f)
+                .widthIn(max = 640.dp)
+                .align(Alignment.CenterHorizontally)
+                .fillMaxHeight(0.90f)
                 .padding(horizontal = 20.dp)
         ) {
             // Header
@@ -239,6 +251,198 @@ fun CartModalBottomSheet(
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.fillMaxWidth().testTag("order_notes_input")
                         )
+                    }
+
+                    // VOUCHER CODE SECTION
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = BrightPeach.copy(alpha = 0.4f)),
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.ConfirmationNumber, contentDescription = null, tint = BrightOrangePrimary, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Kode Voucher & Kupon Promo", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = NeutralDark)
+                                }
+
+                                if (appliedVoucher != null) {
+                                    val v = appliedVoucher!!
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = Color.White,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = FreshGreen, modifier = Modifier.size(18.dp))
+                                                Spacer(Modifier.width(6.dp))
+                                                Column {
+                                                    Text("Voucher: ${v.code}", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = NeutralDark)
+                                                    Text(
+                                                        if (v.discountType == "PERCENT") "Diskon ${v.discountValue.toInt()}%" else "Potongan ${currency.format(v.discountValue)}",
+                                                        fontSize = 11.sp,
+                                                        color = FreshGreen,
+                                                        fontWeight = FontWeight.SemiBold
+                                                    )
+                                                }
+                                            }
+                                            TextButton(
+                                                onClick = {
+                                                    viewModel.removeVoucher()
+                                                    voucherMsg = null
+                                                }
+                                            ) {
+                                                Text("Hapus", color = BrightRed, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        OutlinedTextField(
+                                            value = voucherInput,
+                                            onValueChange = {
+                                                voucherInput = it.uppercase()
+                                                voucherMsg = null
+                                            },
+                                            placeholder = { Text("Contoh: PROMO20") },
+                                            singleLine = true,
+                                            shape = RoundedCornerShape(10.dp),
+                                            modifier = Modifier.weight(1f).testTag("input_voucher_code")
+                                        )
+                                        Button(
+                                            onClick = {
+                                                viewModel.applyVoucher(voucherInput) { success, msg ->
+                                                    voucherMsg = Pair(success, msg)
+                                                    if (success) voucherInput = ""
+                                                }
+                                            },
+                                            shape = RoundedCornerShape(10.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = BrightOrangePrimary),
+                                            modifier = Modifier.height(52.dp).testTag("btn_apply_voucher")
+                                        ) {
+                                            Text("Terapkan", fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+
+                                voucherMsg?.let { (success, msg) ->
+                                    Text(
+                                        text = msg,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (success) FreshGreen else BrightRed
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // MANUAL DISCOUNT SECTION
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = NeutralLight),
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Filled.Percent, contentDescription = null, tint = BrightOrangePrimary, modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Potongan Diskon Manual", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = NeutralDark)
+                                    }
+
+                                    if (manualDiscountValue > 0) {
+                                        TextButton(onClick = {
+                                            viewModel.setManualDiscount(manualDiscountType, 0.0)
+                                            customDiscountInput = ""
+                                        }) {
+                                            Text("Reset", color = BrightRed, fontSize = 11.5.sp)
+                                        }
+                                    }
+                                }
+
+                                // Type Selector
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    FilterChip(
+                                        selected = manualDiscountType == "PERCENT",
+                                        onClick = {
+                                            viewModel.setManualDiscount("PERCENT", manualDiscountValue)
+                                        },
+                                        label = { Text("Persentase (%)") }
+                                    )
+                                    FilterChip(
+                                        selected = manualDiscountType == "NOMINAL",
+                                        onClick = {
+                                            viewModel.setManualDiscount("NOMINAL", manualDiscountValue)
+                                        },
+                                        label = { Text("Nominal (Rp)") }
+                                    )
+                                }
+
+                                // Preset Chips
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    if (manualDiscountType == "PERCENT") {
+                                        listOf(5.0, 10.0, 15.0, 20.0).forEach { pct ->
+                                            FilterChip(
+                                                selected = manualDiscountValue == pct,
+                                                onClick = {
+                                                    viewModel.setManualDiscount("PERCENT", pct)
+                                                    customDiscountInput = pct.toInt().toString()
+                                                },
+                                                label = { Text("${pct.toInt()}%") }
+                                            )
+                                        }
+                                    } else {
+                                        listOf(5000.0, 10000.0, 20000.0).forEach { nom ->
+                                            FilterChip(
+                                                selected = manualDiscountValue == nom,
+                                                onClick = {
+                                                    viewModel.setManualDiscount("NOMINAL", nom)
+                                                    customDiscountInput = nom.toInt().toString()
+                                                },
+                                                label = { Text("Rp ${nom.toInt() / 1000}rb") }
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Custom Input
+                                OutlinedTextField(
+                                    value = customDiscountInput,
+                                    onValueChange = {
+                                        customDiscountInput = it
+                                        val num = it.toDoubleOrNull() ?: 0.0
+                                        viewModel.setManualDiscount(manualDiscountType, num)
+                                    },
+                                    label = { Text(if (manualDiscountType == "PERCENT") "Diskon Custom (%)" else "Diskon Custom (Rp)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.fillMaxWidth().testTag("input_custom_manual_discount")
+                                )
+                            }
+                        }
                     }
 
                     item {

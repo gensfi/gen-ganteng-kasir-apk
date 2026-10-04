@@ -6,6 +6,7 @@ import com.example.data.local.entity.MenuEntity
 import com.example.data.local.entity.RecipeEntity
 import com.example.data.local.entity.SettingEntity
 import com.example.data.local.entity.UserEntity
+import com.example.data.local.entity.VoucherEntity
 
 object InitialDataSeeder {
 
@@ -14,6 +15,7 @@ object InitialDataSeeder {
         if (userCount > 0) {
             // Backfill images for existing menus if they don't have imageUrl
             backfillImagesIfMissing(database)
+            seedDefaultVouchersIfNeeded(database)
             return
         }
 
@@ -219,6 +221,45 @@ object InitialDataSeeder {
                     arrayOf(url, name)
                 )
             }
+        }
+    }
+
+    suspend fun seedDefaultVouchersIfNeeded(database: AppDatabase) {
+        val existing = database.voucherDao().getVoucherByCode("PROMO20")
+        if (existing == null) {
+            val defaultVouchers = listOf(
+                VoucherEntity(
+                    code = "PROMO20",
+                    discountType = "PERCENT",
+                    discountValue = 20.0,
+                    minPurchase = 25000.0,
+                    quota = 100,
+                    usedCount = 0,
+                    expiryDate = System.currentTimeMillis() + (365L * 24 * 3600 * 1000),
+                    isActive = true
+                ),
+                VoucherEntity(
+                    code = "KOPI10RB",
+                    discountType = "NOMINAL",
+                    discountValue = 10000.0,
+                    minPurchase = 30000.0,
+                    quota = 50,
+                    usedCount = 0,
+                    expiryDate = System.currentTimeMillis() + (365L * 24 * 3600 * 1000),
+                    isActive = true
+                ),
+                VoucherEntity(
+                    code = "HEMAT5",
+                    discountType = "PERCENT",
+                    discountValue = 5.0,
+                    minPurchase = 0.0,
+                    quota = 500,
+                    usedCount = 0,
+                    expiryDate = System.currentTimeMillis() + (365L * 24 * 3600 * 1000),
+                    isActive = true
+                )
+            )
+            defaultVouchers.forEach { database.voucherDao().insertVoucher(it) }
         }
     }
 }

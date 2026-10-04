@@ -36,6 +36,7 @@ import com.example.data.local.entity.CategoryEntity
 import com.example.data.local.entity.MenuEntity
 import com.example.data.repository.CartItem
 import com.example.ui.CafePosViewModel
+import com.example.ui.CafeScreen
 import com.example.ui.theme.*
 import java.text.NumberFormat
 import java.util.Locale
@@ -116,6 +117,16 @@ fun PosScreen(
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = { viewModel.navigateTo(CafeScreen.CASHIER_SUMMARY) },
+                        modifier = Modifier.testTag("btn_top_cashier_summary")
+                    ) {
+                        Icon(
+                            Icons.Filled.AccountBalanceWallet,
+                            contentDescription = "Rekap Kas & Order Kasir",
+                            tint = FreshGreen
+                        )
+                    }
                     IconButton(
                         onClick = { showChangePasswordDialog = true },
                         modifier = Modifier.testTag("btn_top_change_password")

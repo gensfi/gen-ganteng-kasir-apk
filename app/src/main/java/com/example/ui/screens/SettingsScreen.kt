@@ -26,11 +26,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.backup.BackupFileInfo
 import com.example.data.local.InitialDataSeeder
 import com.example.data.local.entity.UserEntity
 import com.example.ui.CafePosViewModel
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,13 +54,21 @@ fun SettingsScreen(
     var taxPercentage by remember { mutableStateOf("10.0") }
     var servicePercentage by remember { mutableStateOf("5.0") }
     var saveStatus by remember { mutableStateOf<String?>(null) }
+    var taxSaveStatus by remember { mutableStateOf<String?>(null) }
 
     val allUsers by viewModel.repository.getAllUsers().collectAsState(initial = emptyList())
     var showAddUserDialog by remember { mutableStateOf(false) }
     var userToChangePassword by remember { mutableStateOf<UserEntity?>(null) }
     var showChangeMyPasswordDialog by remember { mutableStateOf(false) }
+    var showResetPasswordDialog by remember { mutableStateOf(false) }
 
     // Backup & Restore state
+    val isAutoBackupEnabled by viewModel.isAutoBackupEnabled.collectAsState()
+    val lastAutoBackupTime by viewModel.lastAutoBackupTime.collectAsState()
+    val backupFiles by viewModel.backupFiles.collectAsState()
+    var fileToRestore by remember { mutableStateOf<BackupFileInfo?>(null) }
+    var backupStatusMsg by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+    val backupDateFormat = remember { SimpleDateFormat("dd MMM yyyy HH:mm", Locale("id", "ID")) }
     var exportedJson by remember { mutableStateOf<String?>(null) }
     var showRestoreDialog by remember { mutableStateOf(false) }
     var restoreJsonInput by remember { mutableStateOf("") }
@@ -135,27 +147,6 @@ fun SettingsScreen(
                             modifier = Modifier.fillMaxWidth()
                         )
 
-                        Divider(modifier = Modifier.padding(vertical = 4.dp))
-
-                        // Tax & Service Charge
-                        Text("Pajak & Biaya Layanan", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(
-                                value = taxPercentage,
-                                onValueChange = { taxPercentage = it },
-                                label = { Text("Pajak PB1 (%)") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                modifier = Modifier.weight(1f)
-                            )
-                            OutlinedTextField(
-                                value = servicePercentage,
-                                onValueChange = { servicePercentage = it },
-                                label = { Text("Service Charge (%)") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-
                         saveStatus?.let {
                             Text(it, color = CoffeeGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
@@ -167,16 +158,92 @@ fun SettingsScreen(
                                     viewModel.repository.setSetting("cafe_address", cafeAddress.trim())
                                     viewModel.repository.setSetting("cafe_phone", cafePhone.trim())
                                     viewModel.repository.setSetting("receipt_footer", receiptFooter.trim())
-                                    viewModel.repository.setSetting("tax_percentage", taxPercentage.trim())
-                                    viewModel.repository.setSetting("service_charge_percentage", servicePercentage.trim())
-                                    saveStatus = "Pengaturan berhasil diperbarui!"
+                                    saveStatus = "Profil dan struk kafe berhasil disimpan!"
+                                    Toast.makeText(context, "Profil kafe berhasil disimpan!", Toast.LENGTH_SHORT).show()
                                 }
                             },
                             shape = RoundedCornerShape(10.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = CoffeeBrownPrimary),
                             modifier = Modifier.fillMaxWidth().testTag("save_settings_button")
                         ) {
-                            Text("Simpan Pengaturan Kafe")
+                            Text("Simpan Profil & Struk Kafe")
+                        }
+                    }
+                }
+            }
+
+            // Dedicated Tax & Service Charge Card
+            item {
+                Card(
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.Percent, contentDescription = null, tint = BrightOrangePrimary)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Pajak & Biaya Layanan", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        }
+
+                        Text(
+                            "Atur persentase pajak restoran (PB1) dan biaya layanan (service charge). Masukkan 0 jika tidak ada pajak.",
+                            fontSize = 12.sp,
+                            color = NeutralMedium
+                        )
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            OutlinedTextField(
+                                value = taxPercentage,
+                                onValueChange = {
+                                    taxPercentage = it
+                                    taxSaveStatus = null
+                                },
+                                label = { Text("Pajak PB1 (%)") },
+                                placeholder = { Text("10.0") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f).testTag("input_tax_percentage")
+                            )
+                            OutlinedTextField(
+                                value = servicePercentage,
+                                onValueChange = {
+                                    servicePercentage = it
+                                    taxSaveStatus = null
+                                },
+                                label = { Text("Service Charge (%)") },
+                                placeholder = { Text("5.0") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f).testTag("input_service_percentage")
+                            )
+                        }
+
+                        taxSaveStatus?.let {
+                            Text(it, color = FreshGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Button(
+                            onClick = {
+                                viewModel.updateTaxAndService(taxPercentage, servicePercentage) { success, msg ->
+                                    taxSaveStatus = msg
+                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = BrightOrangePrimary),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("btn_save_tax_service")
+                        ) {
+                            Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Simpan Pajak & Layanan", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -201,6 +268,14 @@ fun SettingsScreen(
                                 Text("Pengguna & Akses PIN", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                             }
                             Row(verticalAlignment = Alignment.CenterVertically) {
+                                TextButton(
+                                    onClick = { showResetPasswordDialog = true },
+                                    modifier = Modifier.testTag("btn_reset_pin_settings")
+                                ) {
+                                    Icon(Icons.Filled.Key, contentDescription = null, modifier = Modifier.size(16.dp), tint = BrightRed)
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Reset PIN", fontSize = 12.sp, color = BrightRed, fontWeight = FontWeight.Bold)
+                                }
                                 TextButton(
                                     onClick = { showChangeMyPasswordDialog = true },
                                     modifier = Modifier.testTag("btn_change_my_pin_settings")
@@ -279,7 +354,7 @@ fun SettingsScreen(
                 }
             }
 
-            // Backup & Restore Card
+            // Backup & Restore Card (Keamanan & Cadangan Otomatis Bisnis)
             item {
                 Card(
                     shape = RoundedCornerShape(14.dp),
@@ -288,19 +363,121 @@ fun SettingsScreen(
                 ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.Backup, contentDescription = null, tint = CoffeeBrownPrimary)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Cadangkan & Pulihkan Database", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.Backup, contentDescription = null, tint = CoffeeBrownPrimary)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Cadangan Data & Inventaris", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isAutoBackupEnabled) CoffeeGreenLight else NeutralLight
+                            ) {
+                                Text(
+                                    text = if (isAutoBackupEnabled) "🛡️ AKTIF" else "NON-AKTIF",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isAutoBackupEnabled) CoffeeGreen else NeutralMedium,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
                         }
 
-                        Text(
-                            "Ekspor seluruh data menu, stok bahan baku, resep, dan pengaturan ke format JSON yang dapat disimpan atau dipulihkan.",
-                            fontSize = 12.sp,
-                            color = NeutralMedium
-                        )
+                        // Auto-backup toggle
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(NeutralLight.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Backup Data Otomatis", fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
+                                Text(
+                                    "Otomatis mencadangkan stok bahan baku, resep, transaksi & pengaturan ke penyimpanan aman perangkat.",
+                                    fontSize = 11.sp,
+                                    color = NeutralMedium
+                                )
+                            }
+                            Switch(
+                                checked = isAutoBackupEnabled,
+                                onCheckedChange = { viewModel.toggleAutoBackup(it) },
+                                modifier = Modifier.testTag("switch_auto_backup")
+                            )
+                        }
+
+                        // Last backup info
+                        Surface(
+                            color = PrimaryContainer.copy(alpha = 0.4f),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text("Status Cadangan Terakhir:", fontSize = 10.5.sp, color = NeutralMedium)
+                                    Text(
+                                        text = if (lastAutoBackupTime > 0) backupDateFormat.format(Date(lastAutoBackupTime)) else "Belum ada cadangan otomatis",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.5.sp,
+                                        color = CoffeeBrownDark
+                                    )
+                                }
+                                Text(
+                                    "${backupFiles.size} Berkas Tersimpan",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = CoffeeBrownPrimary
+                                )
+                            }
+                        }
+
+                        backupStatusMsg?.let { (success, msg) ->
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (success) CoffeeGreenLight else CoffeeRedLight,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = msg,
+                                    color = if (success) CoffeeGreen else CoffeeRed,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.padding(8.dp)
+                                )
+                            }
+                        }
+
+                        // Primary action buttons
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    viewModel.triggerAutoBackupNow { success, msg ->
+                                        backupStatusMsg = Pair(success, msg)
+                                    }
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = CoffeeBrownPrimary),
+                                modifier = Modifier.weight(1f).testTag("btn_backup_now")
+                            ) {
+                                Icon(Icons.Filled.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Cadangkan Sekarang", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -312,26 +489,89 @@ fun SettingsScreen(
                                         val json = viewModel.backupRestoreManager.exportDatabaseToJson()
                                         exportedJson = json
                                         clipboardManager.setText(AnnotatedString(json))
-                                        Toast.makeText(context, "Data cadangan JSON disalin ke clipboard!", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Data JSON disalin ke clipboard!", Toast.LENGTH_SHORT).show()
                                     }
                                 },
                                 shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Icon(Icons.Filled.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text("Ekspor JSON", fontSize = 12.sp)
+                                Text("Salin JSON", fontSize = 11.5.sp)
                             }
 
-                            Button(
+                            OutlinedButton(
                                 onClick = { showRestoreDialog = true },
                                 shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = CoffeeBrownPrimary),
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Icon(Icons.Filled.FileUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Filled.Code, contentDescription = null, modifier = Modifier.size(14.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text("Pulihkan JSON", fontSize = 12.sp)
+                                Text("Tempel JSON", fontSize = 11.5.sp)
+                            }
+                        }
+
+                        // Available Backup Files List
+                        if (backupFiles.isNotEmpty()) {
+                            Text(
+                                "Daftar Berkas Cadangan Tersimpan di Perangkat:",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = NeutralDark
+                            )
+
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                backupFiles.take(5).forEach { bFile ->
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = NeutralLight,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                                Icon(
+                                                    if (bFile.isAuto) Icons.Filled.CloudDone else Icons.Filled.InsertDriveFile,
+                                                    contentDescription = null,
+                                                    tint = if (bFile.isAuto) CoffeeGreen else CoffeeAmber,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                                Spacer(Modifier.width(8.dp))
+                                                Column {
+                                                    Text(
+                                                        bFile.filename,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        fontSize = 11.5.sp,
+                                                        maxLines = 1
+                                                    )
+                                                    Text(
+                                                        "${backupDateFormat.format(Date(bFile.timestamp))} • ${bFile.sizeFormatted} • ${if (bFile.isAuto) "Otomatis" else "Manual"}",
+                                                        fontSize = 10.sp,
+                                                        color = NeutralMedium
+                                                    )
+                                                }
+                                            }
+
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                IconButton(
+                                                    onClick = { viewModel.shareBackup(bFile.file) },
+                                                    modifier = Modifier.size(32.dp)
+                                                ) {
+                                                    Icon(Icons.Filled.Share, contentDescription = "Bagikan", tint = CoffeeBrownPrimary, modifier = Modifier.size(16.dp))
+                                                }
+                                                IconButton(
+                                                    onClick = { fileToRestore = bFile },
+                                                    modifier = Modifier.size(32.dp)
+                                                ) {
+                                                    Icon(Icons.Filled.Restore, contentDescription = "Pulihkan", tint = CoffeeGreen, modifier = Modifier.size(18.dp))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
 
@@ -339,12 +579,12 @@ fun SettingsScreen(
                             Surface(
                                 color = NeutralLight,
                                 shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.fillMaxWidth().heightIn(max = 120.dp)
+                                modifier = Modifier.fillMaxWidth().heightIn(max = 100.dp)
                             ) {
                                 Text(
-                                    text = json.take(300) + "...\n[Disalin ke clipboard]",
+                                    text = json.take(250) + "...\n[Tersalin ke clipboard]",
                                     fontFamily = FontFamily.Monospace,
-                                    fontSize = 10.sp,
+                                    fontSize = 9.5.sp,
                                     modifier = Modifier.padding(8.dp)
                                 )
                             }
@@ -489,6 +729,51 @@ fun SettingsScreen(
             targetUser = user,
             isAdminReset = (user.id != currentUser?.id),
             onDismiss = { userToChangePassword = null }
+        )
+    }
+
+    // Reset Password / Lupa PIN Dialog
+    if (showResetPasswordDialog) {
+        ResetPasswordDialog(
+            viewModel = viewModel,
+            onDismiss = { showResetPasswordDialog = false }
+        )
+    }
+
+    // Restore File Confirmation Dialog
+    fileToRestore?.let { bFile ->
+        AlertDialog(
+            onDismissRequest = { fileToRestore = null },
+            icon = { Icon(Icons.Filled.Warning, contentDescription = null, tint = CoffeeOrange) },
+            title = { Text("Pulihkan Cadangan?", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("Apakah Anda yakin ingin memulihkan database dari berkas:", fontSize = 13.sp)
+                    Spacer(Modifier.height(6.dp))
+                    Text(bFile.filename, fontWeight = FontWeight.Bold, color = CoffeeBrownPrimary, fontSize = 13.sp)
+                    Text("Dibuat: ${backupDateFormat.format(Date(bFile.timestamp))} (${bFile.sizeFormatted})", fontSize = 11.5.sp, color = NeutralMedium)
+                    Spacer(Modifier.height(8.dp))
+                    Text("Peringatan: Data menu, stok bahan baku, dan transaksi akan diselaraskan dengan isi berkas cadangan ini.", fontSize = 11.5.sp, color = CoffeeRed)
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.restoreBackupFile(bFile.file) { _, msg ->
+                            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                            fileToRestore = null
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = CoffeeBrownPrimary)
+                ) {
+                    Text("Ya, Pulihkan Sekarang")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { fileToRestore = null }) {
+                    Text("Batal")
+                }
+            }
         )
     }
 }
