@@ -10,6 +10,7 @@ import com.example.data.local.AppDatabase
 import com.example.data.local.InitialDataSeeder
 import com.example.data.local.entity.CategoryEntity
 import com.example.data.local.entity.IngredientEntity
+import com.example.data.local.entity.MemberEntity
 import com.example.data.local.entity.MenuEntity
 import com.example.data.local.entity.RecipeEntity
 import com.example.data.local.entity.TransactionEntity
@@ -50,13 +51,15 @@ enum class CafeScreen {
     GOOGLE_SHEETS,
     SETTINGS,
     CASHIER_SUMMARY,
-    VOUCHER_MANAGEMENT
+    VOUCHER_MANAGEMENT,
+    MEMBER_MANAGEMENT
 }
 
 data class CompletedTransaction(
     val transaction: TransactionEntity,
     val items: List<TransactionItemEntity>,
-    val receiptText: String
+    val receiptText: String,
+    val remainingPoints: Int? = null
 )
 
 class CafePosViewModel(application: Application) : AndroidViewModel(application) {
@@ -75,9 +78,30 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
     private val _currentUser = MutableStateFlow<UserEntity?>(null)
     val currentUser: StateFlow<UserEntity?> = _currentUser.asStateFlow()
 
+    // All Users
+    val users: StateFlow<List<UserEntity>> = repository.getAllUsers()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Cafe Logo Path
+    private val _cafeLogoPath = MutableStateFlow<String?>(null)
+    val cafeLogoPath: StateFlow<String?> = _cafeLogoPath.asStateFlow()
+
+    fun updateCafeLogoPath(path: String?) {
+        _cafeLogoPath.value = path
+        viewModelScope.launch {
+            repository.setSetting("cafe_logo_path", path.orEmpty())
+        }
+    }
+
     // Screen change
     fun navigateTo(screen: CafeScreen) {
-        if (_currentUser.value?.role == "KASIR" && screen !in listOf(CafeScreen.POS, CafeScreen.PRINTER_SETTINGS, CafeScreen.CASHIER_SUMMARY)) {
+        if (_currentUser.value?.role == "KASIR" && screen !in listOf(
+                CafeScreen.POS,
+                CafeScreen.PRINTER_SETTINGS,
+                CafeScreen.CASHIER_SUMMARY,
+                CafeScreen.MEMBER_MANAGEMENT
+            )
+        ) {
             _currentScreen.value = CafeScreen.POS
             return
         }
@@ -94,6 +118,26 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
                 onResult(true, "Selamat datang, ${user.name} (${user.role})")
             } else {
                 onResult(false, "PIN salah! Silakan coba lagi.")
+            }
+        }
+    }
+
+    fun loginWithUsernameAndPin(username: String, pin: String, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            val trimmedUsername = username.trim()
+            val trimmedPin = pin.trim()
+            val user = if (trimmedUsername.isNotBlank()) {
+                repository.getUserByUsernameAndPin(trimmedUsername, trimmedPin)
+            } else {
+                repository.getUserByPin(trimmedPin)
+            }
+
+            if (user != null) {
+                _currentUser.value = user
+                _currentScreen.value = CafeScreen.POS
+                onResult(true, "Selamat datang, ${user.name} (${user.role})")
+            } else {
+                onResult(false, "Akun atau Password / PIN salah! Silakan periksa kembali.")
             }
         }
     }
@@ -338,7 +382,156 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
         _customerName.value = ""
         _customerPhone.value = ""
         _orderNotes.value = ""
+        _selectedMember.value = null
+        _redeemedPoints.value = 0
         clearAllDiscounts()
+    }
+
+    // --- Member & Loyalty Points ---
+    val members: StateFlow<List<MemberEntity>> = repository.getAllMembers()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _selectedMember = MutableStateFlow<MemberEntity?>(null)
+    val selectedMember: StateFlow<MemberEntity?> = _selectedMember.asStateFlow()
+
+    private val _redeemedPoints = MutableStateFlow(0)
+    val redeemedPoints: StateFlow<Int> = _redeemedPoints.asStateFlow()
+
+    private val _pointsEarnRate = MutableStateFlow(200.0) // Rp 200 = 1 Poin
+    val pointsEarnRate: StateFlow<Double> = _pointsEarnRate.asStateFlow()
+
+    private val _pointsRedeemRate = MutableStateFlow(1.0) // 1 Poin = Rp 1
+    val pointsRedeemRate: StateFlow<Double> = _pointsRedeemRate.asStateFlow()
+
+    fun selectMember(member: MemberEntity?) {
+        _selectedMember.value = member
+        _redeemedPoints.value = 0
+        if (member != null) {
+            _customerName.value = member.name
+            _customerPhone.value = member.phone
+        }
+    }
+
+    fun setRedeemedPoints(points: Int) {
+        val maxPoints = _selectedMember.value?.points ?: 0
+        val maxRedeemBySubtotal = ((cartSubtotal.value - _discountAmount.value) / _pointsRedeemRate.value).toInt().coerceAtLeast(0)
+        val ceiling = minOf(maxPoints, maxRedeemBySubtotal)
+        _redeemedPoints.value = points.coerceIn(0, ceiling)
+    }
+
+    fun addMember(
+        name: String,
+        phone: String,
+        initialPoints: Int = 0,
+        email: String? = null,
+        notes: String? = null,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                if (name.isBlank() || phone.isBlank()) {
+                    onResult(false, "Nama dan nomor HP member wajib diisi!")
+                    return@launch
+                }
+                val existing = repository.getMemberByPhone(phone)
+                if (existing != null) {
+                    onResult(false, "Nomor HP '$phone' sudah terdaftar atas nama ${existing.name}!")
+                    return@launch
+                }
+                val newId = repository.insertMember(
+                    MemberEntity(
+                        name = name.trim(),
+                        phone = phone.trim(),
+                        points = maxOf(0, initialPoints),
+                        email = email?.trim()?.ifBlank { null },
+                        notes = notes?.trim()?.ifBlank { null }
+                    )
+                )
+                val created = repository.getMemberById(newId)
+                if (created != null && _selectedMember.value == null) {
+                    selectMember(created)
+                }
+                onResult(true, "Member '$name' berhasil didaftarkan!")
+            } catch (e: Exception) {
+                onResult(false, "Gagal menambahkan member: ${e.message}")
+            }
+        }
+    }
+
+    fun updateMember(member: MemberEntity, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                repository.updateMember(member)
+                if (_selectedMember.value?.id == member.id) {
+                    _selectedMember.value = member
+                }
+                onResult(true, "Data member '${member.name}' berhasil diperbarui!")
+            } catch (e: Exception) {
+                onResult(false, "Gagal memperbarui member: ${e.message}")
+            }
+        }
+    }
+
+    fun deleteMember(member: MemberEntity, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                repository.deleteMember(member)
+                if (_selectedMember.value?.id == member.id) {
+                    _selectedMember.value = null
+                    _redeemedPoints.value = 0
+                }
+                onResult(true, "Member '${member.name}' berhasil dihapus!")
+            } catch (e: Exception) {
+                onResult(false, "Gagal menghapus member: ${e.message}")
+            }
+        }
+    }
+
+    fun adjustMemberPoints(memberId: Long, delta: Int, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                if (delta >= 0) {
+                    repository.addMemberPoints(memberId, delta)
+                    onResult(true, "Berhasil menambahkan $delta poin!")
+                } else {
+                    repository.deductMemberPoints(memberId, -delta)
+                    onResult(true, "Berhasil mengurangi ${-delta} poin!")
+                }
+                if (_selectedMember.value?.id == memberId) {
+                    _selectedMember.value = repository.getMemberById(memberId)
+                }
+            } catch (e: Exception) {
+                onResult(false, "Gagal mengatur poin: ${e.message}")
+            }
+        }
+    }
+
+    fun setMemberPoints(memberId: Long, newPoints: Int, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                repository.updateMemberPoints(memberId, maxOf(0, newPoints))
+                if (_selectedMember.value?.id == memberId) {
+                    _selectedMember.value = repository.getMemberById(memberId)
+                }
+                onResult(true, "Poin berhasil disetel menjadi $newPoints!")
+            } catch (e: Exception) {
+                onResult(false, "Gagal menyetel poin: ${e.message}")
+            }
+        }
+    }
+
+    fun savePointSettings(earnRate: Double, redeemRate: Double, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                repository.setSetting("points_earn_rate", earnRate.toString())
+                repository.setSetting("points_redeem_rate", redeemRate.toString())
+                _pointsEarnRate.value = earnRate
+                _pointsRedeemRate.value = redeemRate
+                onResult(true, "Pengaturan rasio poin berhasil disimpan!")
+            } catch (e: Exception) {
+                onResult(false, "Gagal menyimpan pengaturan poin: ${e.message}")
+            }
+        }
     }
 
     // Calculations
@@ -531,15 +724,25 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
             val subtotal = itemsInCart.sumOf { it.menu.price * it.quantity }
             val taxAmount = (subtotal * _taxRate.value) / 100.0
             val serviceAmount = (subtotal * _serviceRate.value) / 100.0
-            val total = subtotal + taxAmount + serviceAmount - _discountAmount.value
+
+            val member = _selectedMember.value ?: if (_customerPhone.value.isNotBlank()) repository.getMemberByPhone(_customerPhone.value) else null
+            val pointsToRedeem = _redeemedPoints.value
+            val pointsDiscount = pointsToRedeem * _pointsRedeemRate.value
+            val totalDiscounts = _discountAmount.value + pointsDiscount
+
+            val total = maxOf(0.0, subtotal + taxAmount + serviceAmount - totalDiscounts)
             val change = if (paymentMethod == "CASH") maxOf(0.0, cashGiven - total) else 0.0
+
+            // Member earn rate: default Rp 200 = 1 point
+            val earnRate = _pointsEarnRate.value.coerceAtLeast(1.0)
+            val pointsEarned = if (member != null) (total / earnRate).toInt().coerceAtLeast(0) else 0
 
             val dateStr = SimpleDateFormat("yyyyMMdd-HHmmss", Locale("id", "ID")).format(Date())
             val trxId = "TRX-$dateStr"
 
             val user = _currentUser.value
             val cashierId = user?.id ?: 1L
-            val cashierName = user?.name ?: "Kasir Default"
+            val cashierName = user?.name ?: "Kasir"
 
             val transactionEntity = TransactionEntity(
                 id = trxId,
@@ -549,14 +752,17 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
                 subtotal = subtotal,
                 taxAmount = taxAmount,
                 serviceChargeAmount = serviceAmount,
-                discountAmount = _discountAmount.value,
+                discountAmount = totalDiscounts,
                 totalAmount = total,
                 paymentMethod = paymentMethod,
                 cashGiven = if (paymentMethod == "CASH") cashGiven else total,
                 changeAmount = change,
-                customerName = _customerName.value.ifBlank { null },
-                customerPhone = _customerPhone.value.ifBlank { null },
-                notes = _orderNotes.value.ifBlank { null }
+                customerName = _customerName.value.ifBlank { member?.name },
+                customerPhone = _customerPhone.value.ifBlank { member?.phone },
+                notes = _orderNotes.value.ifBlank { null },
+                memberId = member?.id,
+                pointsEarned = pointsEarned,
+                pointsRedeemed = pointsToRedeem
             )
 
             val itemEntities = itemsInCart.map { cItem ->
@@ -573,6 +779,19 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
 
             val result = repository.processTransaction(transactionEntity, itemEntities)
             if (result.isSuccess) {
+                // Update member points in database
+                var finalRemainingPoints: Int? = null
+                if (member != null) {
+                    if (pointsEarned > 0) {
+                        repository.addMemberPoints(member.id, pointsEarned)
+                    }
+                    if (pointsToRedeem > 0) {
+                        repository.deductMemberPoints(member.id, pointsToRedeem)
+                    }
+                    val updatedMember = repository.getMemberById(member.id)
+                    finalRemainingPoints = updatedMember?.points ?: maxOf(0, member.points + pointsEarned - pointsToRedeem)
+                }
+
                 val cafeName = repository.getSetting("cafe_name") ?: "Kopi Kenangan Senja"
                 val cafeAddress = repository.getSetting("cafe_address") ?: ""
                 val cafePhone = repository.getSetting("cafe_phone") ?: ""
@@ -584,13 +803,15 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
                     cafeName = cafeName,
                     cafeAddress = cafeAddress,
                     cafePhone = cafePhone,
-                    footerMessage = footer
+                    footerMessage = footer,
+                    remainingPoints = finalRemainingPoints
                 )
 
                 val completed = CompletedTransaction(
                     transaction = transactionEntity,
                     items = itemEntities,
-                    receiptText = receiptText
+                    receiptText = receiptText,
+                    remainingPoints = finalRemainingPoints
                 )
 
                 _lastTransaction.value = completed
@@ -663,6 +884,7 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
             val cafeAddress = repository.getSetting("cafe_address") ?: ""
             val cafePhone = repository.getSetting("cafe_phone") ?: ""
             val footer = repository.getSetting("receipt_footer") ?: ""
+            val logoPath = _cafeLogoPath.value ?: repository.getSetting("cafe_logo_path")?.takeIf { it.isNotBlank() }
 
             val res = printerHelper.printTransactionReceipt(
                 transaction = completed.transaction,
@@ -671,7 +893,9 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
                 cafeAddress = cafeAddress,
                 cafePhone = cafePhone,
                 footerMessage = footer,
-                paperSize = _paperSize.value
+                paperSize = _paperSize.value,
+                logoPath = logoPath,
+                remainingPoints = completed.remainingPoints
             )
 
             res.fold(
@@ -769,6 +993,13 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
             }
             val start = cal.timeInMillis
             val summary = repository.getSalesReports(start, end)
+            _reportSummary.value = summary
+        }
+    }
+
+    fun loadReportsForRange(startDateMillis: Long, endDateMillis: Long) {
+        viewModelScope.launch {
+            val summary = repository.getSalesReports(startDateMillis, endDateMillis)
             _reportSummary.value = summary
         }
     }
@@ -917,9 +1148,16 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
             val savedTax = repository.getSetting("tax_percentage")?.toDoubleOrNull() ?: 10.0
             val savedService = repository.getSetting("service_charge_percentage")?.toDoubleOrNull() ?: 5.0
             val savedPaper = repository.getSetting("printer_paper_size")?.toIntOrNull() ?: 58
+            val savedLogoPath = repository.getSetting("cafe_logo_path")?.takeIf { it.isNotBlank() }
+            val savedEarnRate = repository.getSetting("points_earn_rate")?.toDoubleOrNull() ?: 200.0
+            val savedRedeemRate = repository.getSetting("points_redeem_rate")?.toDoubleOrNull() ?: 1.0
+
             _taxRate.value = savedTax
             _serviceRate.value = savedService
             _paperSize.value = savedPaper
+            _cafeLogoPath.value = savedLogoPath
+            _pointsEarnRate.value = savedEarnRate
+            _pointsRedeemRate.value = savedRedeemRate
 
             // Auto backup settings & initial snapshot if needed
             _isAutoBackupEnabled.value = backupRestoreManager.isAutoBackupEnabled()

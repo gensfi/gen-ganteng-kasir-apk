@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import com.example.data.local.AppDatabase
 import com.example.data.local.entity.CategoryEntity
 import com.example.data.local.entity.IngredientEntity
+import com.example.data.local.entity.MemberEntity
 import com.example.data.local.entity.MenuEntity
 import com.example.data.local.entity.RecipeEntity
 import com.example.data.local.entity.SettingEntity
@@ -55,6 +56,23 @@ class CafePosRepository(
     private val transactionDao = database.transactionDao()
     private val settingDao = database.settingDao()
     private val voucherDao = database.voucherDao()
+    private val memberDao = database.memberDao()
+
+    // --- Member & Loyalty Points ---
+    fun getAllMembers(): Flow<List<MemberEntity>> = memberDao.getAllMembers()
+    suspend fun getMemberById(id: Long): MemberEntity? = memberDao.getMemberById(id)
+    suspend fun getMemberByPhone(phone: String): MemberEntity? = memberDao.getMemberByPhone(phone.trim())
+    fun searchMembers(query: String): Flow<List<MemberEntity>> = memberDao.searchMembers(query.trim())
+    suspend fun insertMember(member: MemberEntity): Long = memberDao.insertMember(member)
+    suspend fun updateMember(member: MemberEntity) = memberDao.updateMember(member)
+    suspend fun deleteMember(member: MemberEntity) = memberDao.deleteMember(member)
+    suspend fun updateMemberPoints(memberId: Long, points: Int) = memberDao.updatePoints(memberId, points)
+    suspend fun addMemberPoints(memberId: Long, delta: Int) = memberDao.addPoints(memberId, delta)
+    suspend fun deductMemberPoints(memberId: Long, delta: Int) = memberDao.deductPoints(memberId, delta)
+    suspend fun getMemberCount(): Int = memberDao.getMemberCount()
+    suspend fun getTotalMemberPoints(): Int = memberDao.getTotalPoints()
+    suspend fun getPointsEarnRate(): Double = getSetting("points_earn_rate")?.toDoubleOrNull() ?: 200.0
+    suspend fun getPointsRedeemRate(): Double = getSetting("points_redeem_rate")?.toDoubleOrNull() ?: 1.0
 
     // --- Vouchers & Promo ---
     fun getAllVouchers(): Flow<List<VoucherEntity>> = voucherDao.getAllVouchers()
@@ -67,6 +85,9 @@ class CafePosRepository(
     // --- Users & Auth ---
     fun getAllUsers(): Flow<List<UserEntity>> = userDao.getAllUsers()
     suspend fun getUserByPin(pin: String): UserEntity? = userDao.getUserByPin(pin)
+    suspend fun getUserByUsername(username: String): UserEntity? = userDao.getUserByUsername(username.trim())
+    suspend fun getUserByUsernameAndPin(username: String, pin: String): UserEntity? =
+        userDao.getUserByUsernameAndPin(username.trim(), pin.trim())
     suspend fun insertUser(user: UserEntity): Long = userDao.insertUser(user)
     suspend fun updateUser(user: UserEntity) = userDao.updateUser(user)
     suspend fun deleteUser(user: UserEntity) = userDao.deleteUser(user)

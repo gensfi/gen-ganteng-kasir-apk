@@ -6,6 +6,7 @@ import androidx.core.content.FileProvider
 import com.example.data.local.AppDatabase
 import com.example.data.local.entity.CategoryEntity
 import com.example.data.local.entity.IngredientEntity
+import com.example.data.local.entity.MemberEntity
 import com.example.data.local.entity.MenuEntity
 import com.example.data.local.entity.RecipeEntity
 import com.example.data.local.entity.SettingEntity
@@ -185,7 +186,24 @@ class BackupRestoreManager(private val db: AppDatabase) {
         }
         root.put("transactionItems", itemsArr)
 
-        root.put("version", 2)
+        // 9. Members
+        val members = db.memberDao().getAllMembers().first()
+        val memArr = JSONArray()
+        members.forEach { m ->
+            memArr.put(JSONObject().apply {
+                put("id", m.id)
+                put("name", m.name)
+                put("phone", m.phone)
+                put("points", m.points)
+                put("email", m.email.orEmpty())
+                put("notes", m.notes.orEmpty())
+                put("createdAt", m.createdAt)
+                put("lastTransactionAt", m.lastTransactionAt ?: 0L)
+            })
+        }
+        root.put("members", memArr)
+
+        root.put("version", 3)
         root.put("appName", "Rencana Kopi POS")
         root.put("exportTimestamp", System.currentTimeMillis())
 
@@ -349,6 +367,26 @@ class BackupRestoreManager(private val db: AppDatabase) {
                 }
                 if (list.isNotEmpty()) {
                     db.transactionDao().insertTransactionItems(list)
+                }
+            }
+
+            // Restore members
+            if (root.has("members")) {
+                val memArr = root.getJSONArray("members")
+                for (i in 0 until memArr.length()) {
+                    val obj = memArr.getJSONObject(i)
+                    db.memberDao().insertMember(
+                        MemberEntity(
+                            id = obj.optLong("id", 0),
+                            name = obj.getString("name"),
+                            phone = obj.getString("phone"),
+                            points = obj.optInt("points", 0),
+                            email = obj.optString("email").takeIf { it.isNotBlank() },
+                            notes = obj.optString("notes").takeIf { it.isNotBlank() },
+                            createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
+                            lastTransactionAt = obj.optLong("lastTransactionAt", 0L).takeIf { it > 0 }
+                        )
+                    )
                 }
             }
 

@@ -19,7 +19,8 @@ object WhatsAppShareHelper {
         cafeName: String,
         cafeAddress: String,
         cafePhone: String,
-        footerMessage: String
+        footerMessage: String,
+        remainingPoints: Int? = null
     ): String {
         val currency = NumberFormat.getCurrencyInstance(Locale("id", "ID")).apply {
             maximumFractionDigits = 0
@@ -63,12 +64,35 @@ object WhatsAppShareHelper {
             sb.append("Pajak (PB1)    : ${currency.format(transaction.taxAmount)}\n")
         }
 
+        val displayPaymentMethod = when (transaction.paymentMethod.uppercase()) {
+            "CASH" -> "Tunai (CASH)"
+            "QRIS" -> "QRIS"
+            "ONLINE", "PESANAN_ONLINE", "TRANSFER" -> "Pesanan Online"
+            else -> transaction.paymentMethod
+        }
         sb.append("*TOTAL AKHIR   : ${currency.format(transaction.totalAmount)}*\n")
-        sb.append("Metode Bayar   : ${transaction.paymentMethod}\n")
+        sb.append("Metode Bayar   : $displayPaymentMethod\n")
 
         if (transaction.paymentMethod.equals("CASH", ignoreCase = true)) {
             sb.append("Tunai Diterima : ${currency.format(transaction.cashGiven)}\n")
             sb.append("Kembalian      : ${currency.format(transaction.changeAmount)}\n")
+        }
+
+        if (transaction.memberId != null || transaction.pointsEarned > 0 || transaction.pointsRedeemed > 0 || remainingPoints != null) {
+            sb.append("----------------------------\n")
+            sb.append("⭐ *LOYALITAS MEMBER*\n")
+            if (!transaction.customerName.isNullOrBlank()) {
+                sb.append("Member         : ${transaction.customerName}\n")
+            }
+            if (transaction.pointsEarned > 0) {
+                sb.append("Poin Diperoleh : +${transaction.pointsEarned} Poin\n")
+            }
+            if (transaction.pointsRedeemed > 0) {
+                sb.append("Poin Ditukar   : -${transaction.pointsRedeemed} Poin (-${currency.format(transaction.pointsRedeemed * 1.0)})\n")
+            }
+            // Sisa Poin yang dimiliki oleh member
+            val sisaPoin = remainingPoints ?: 0
+            sb.append("Sisa Poin      : $sisaPoin Poin\n")
         }
 
         sb.append("============================\n")
@@ -86,34 +110,60 @@ object WhatsAppShareHelper {
         phoneNumber: String?,
         receiptText: String
     ): Boolean {
-        return try {
-            val encodedMessage = URLEncoder.encode(receiptText, "UTF-8")
-            val targetNumber = cleanPhoneNumber(phoneNumber)
-
-            val uri = if (!targetNumber.isNullOrBlank()) {
-                Uri.parse("https://api.whatsapp.com/send?phone=$targetNumber&text=$encodedMessage")
-            } else {
-                Uri.parse("https://api.whatsapp.com/send?text=$encodedMessage")
-            }
-
-            val intent = Intent(Intent.ACTION_VIEW, uri).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-            context.startActivity(intent)
-            true
+        val targetNumber = cleanPhoneNumber(phoneNumber)
+        val encodedMessage = try {
+            URLEncoder.encode(receiptText, "UTF-8")
         } catch (_: Exception) {
-            // Fallback to standard share sheet
+            receiptText
+        }
+
+        // 1. Try direct WhatsApp link with target phone number
+        if (!targetNumber.isNullOrBlank()) {
             try {
-                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, receiptText)
+                val directUri = Uri.parse("https://api.whatsapp.com/send?phone=$targetNumber&text=$encodedMessage")
+                val waIntent = Intent(Intent.ACTION_VIEW, directUri).apply {
+                    setPackage("com.whatsapp")
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 }
-                context.startActivity(Intent.createChooser(shareIntent, "Kirim Struk Digital"))
-                true
+                context.startActivity(waIntent)
+                return true
             } catch (_: Exception) {
-                false
+                // WhatsApp app with explicit package not found, try generic view
+                try {
+                    val genericUri = Uri.parse("https://api.whatsapp.com/send?phone=$targetNumber&text=$encodedMessage")
+                    val browserIntent = Intent(Intent.ACTION_VIEW, genericUri).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(browserIntent)
+                    return true
+                } catch (_: Exception) {}
             }
+        } else {
+            // No phone specified, try WhatsApp share without specific number
+            try {
+                val uri = Uri.parse("https://api.whatsapp.com/send?text=$encodedMessage")
+                val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(intent)
+                return true
+            } catch (_: Exception) {}
+        }
+
+        // 2. Fallback to standard Android share chooser
+        return try {
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, receiptText)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            val chooser = Intent.createChooser(shareIntent, "Kirim Struk Digital").apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(chooser)
+            true
+        } catch (_: Exception) {
+            false
         }
     }
 

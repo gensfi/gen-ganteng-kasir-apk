@@ -46,6 +46,8 @@ object InitialDataSeeder {
             SettingEntity("tax_percentage", "10.0"),
             SettingEntity("service_charge_percentage", "5.0"),
             SettingEntity("printer_paper_size", "58"),
+            SettingEntity("points_earn_rate", "200"),
+            SettingEntity("points_redeem_rate", "1"),
             SettingEntity("google_sheets_url", ""),
             SettingEntity("google_sheets_id", ""),
             SettingEntity("google_sheets_api_key", ""),

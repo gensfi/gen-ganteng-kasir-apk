@@ -104,13 +104,6 @@ fun PosScreen(
                                         fontWeight = FontWeight.SemiBold,
                                         color = if (currentUser?.role == "ADMIN") Color.White else CoffeeBrownDark
                                     )
-                                    Spacer(Modifier.width(4.dp))
-                                    Icon(
-                                        Icons.Filled.Key,
-                                        contentDescription = "Ganti PIN",
-                                        tint = if (currentUser?.role == "ADMIN") Color.White else CoffeeBrownDark,
-                                        modifier = Modifier.size(11.dp)
-                                    )
                                 }
                             }
                         }
@@ -128,20 +121,10 @@ fun PosScreen(
                         )
                     }
                     IconButton(
-                        onClick = { showChangePasswordDialog = true },
-                        modifier = Modifier.testTag("btn_top_change_password")
-                    ) {
-                        Icon(
-                            Icons.Filled.Key,
-                            contentDescription = "Ganti PIN / Password",
-                            tint = BrightOrangePrimary
-                        )
-                    }
-                    IconButton(
                         onClick = { viewModel.switchUser() },
                         modifier = Modifier.testTag("switch_user_button")
                     ) {
-                        Icon(Icons.Outlined.Lock, contentDescription = "Ganti Kasir / Login PIN")
+                        Icon(Icons.Outlined.AccountCircle, contentDescription = "Ganti Kasir / Pengguna")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

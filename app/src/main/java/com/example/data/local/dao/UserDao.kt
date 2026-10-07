@@ -23,6 +23,9 @@ interface UserDao {
     @Query("SELECT * FROM users WHERE username = :username LIMIT 1")
     suspend fun getUserByUsername(username: String): UserEntity?
 
+    @Query("SELECT * FROM users WHERE (LOWER(username) = LOWER(:username) OR name = :username) AND pin = :pin LIMIT 1")
+    suspend fun getUserByUsernameAndPin(username: String, pin: String): UserEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertUser(user: UserEntity): Long
 

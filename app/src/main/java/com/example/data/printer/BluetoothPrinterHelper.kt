@@ -185,7 +185,9 @@ class BluetoothPrinterHelper(private val context: Context) {
         cafeAddress: String,
         cafePhone: String,
         footerMessage: String,
-        paperSize: Int = 58
+        paperSize: Int = 58,
+        logoPath: String? = null,
+        remainingPoints: Int? = null
     ): Result<Unit> = withContext(Dispatchers.IO) {
         val stream = outputStream ?: return@withContext Result.failure(Exception("Printer belum terhubung."))
         val maxChars = if (paperSize == 80) 48 else 32
@@ -198,6 +200,25 @@ class BluetoothPrinterHelper(private val context: Context) {
             val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("id", "ID"))
 
             bytes.addAll(CMD_INIT.toList())
+
+            // 0. Print Logo if available
+            if (!logoPath.isNullOrBlank()) {
+                try {
+                    val file = java.io.File(logoPath)
+                    if (file.exists()) {
+                        val bmp = android.graphics.BitmapFactory.decodeFile(file.absolutePath)
+                        if (bmp != null) {
+                            val targetWidth = if (paperSize == 80) 256 else 192
+                            val targetHeight = ((bmp.height.toFloat() / bmp.width.toFloat()) * targetWidth).toInt().coerceAtLeast(32)
+                            val scaled = android.graphics.Bitmap.createScaledBitmap(bmp, targetWidth, targetHeight, true)
+                            val rasterBytes = decodeBitmapToEscPosRaster(scaled)
+                            bytes.addAll(CMD_ALIGN_CENTER.toList())
+                            bytes.addAll(rasterBytes.toList())
+                            bytes.addAll("\n".toByteArray(Charsets.ISO_8859_1).toList())
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
 
             // 1. Cafe Header (Center, Bold, Large)
             bytes.addAll(CMD_ALIGN_CENTER.toList())
@@ -265,11 +286,36 @@ class BluetoothPrinterHelper(private val context: Context) {
             bytes.addAll(formatKeyValue("TOTAL", currency.format(transaction.totalAmount), maxChars).toByteArray(Charsets.ISO_8859_1).toList())
             bytes.addAll(CMD_BOLD_OFF.toList())
 
-            bytes.addAll(formatKeyValue("Metode Bayar", transaction.paymentMethod, maxChars).toByteArray(Charsets.ISO_8859_1).toList())
+            val displayMethod = when (transaction.paymentMethod.uppercase()) {
+                "CASH" -> "Tunai (CASH)"
+                "QRIS" -> "QRIS"
+                "ONLINE", "PESANAN_ONLINE", "TRANSFER" -> "Pesanan Online"
+                else -> transaction.paymentMethod
+            }
+            bytes.addAll(formatKeyValue("Metode Bayar", displayMethod, maxChars).toByteArray(Charsets.ISO_8859_1).toList())
 
             if (transaction.paymentMethod.equals("CASH", ignoreCase = true)) {
                 bytes.addAll(formatKeyValue("Tunai Diterima", currency.format(transaction.cashGiven), maxChars).toByteArray(Charsets.ISO_8859_1).toList())
                 bytes.addAll(formatKeyValue("Kembalian", currency.format(transaction.changeAmount), maxChars).toByteArray(Charsets.ISO_8859_1).toList())
+            }
+
+            // Member Loyalty Info
+            if (transaction.memberId != null || transaction.pointsEarned > 0 || transaction.pointsRedeemed > 0 || remainingPoints != null) {
+                bytes.addAll(formatDivider('-', maxChars).toByteArray(Charsets.ISO_8859_1).toList())
+                bytes.addAll(CMD_BOLD_ON.toList())
+                bytes.addAll("LOYALITAS MEMBER\n".toByteArray(Charsets.ISO_8859_1).toList())
+                bytes.addAll(CMD_BOLD_OFF.toList())
+                if (!transaction.customerName.isNullOrBlank()) {
+                    bytes.addAll(formatKeyValue("Member", transaction.customerName, maxChars).toByteArray(Charsets.ISO_8859_1).toList())
+                }
+                if (transaction.pointsEarned > 0) {
+                    bytes.addAll(formatKeyValue("Poin Diperoleh", "+${transaction.pointsEarned}", maxChars).toByteArray(Charsets.ISO_8859_1).toList())
+                }
+                if (transaction.pointsRedeemed > 0) {
+                    bytes.addAll(formatKeyValue("Poin Digunakan", "-${transaction.pointsRedeemed}", maxChars).toByteArray(Charsets.ISO_8859_1).toList())
+                }
+                val sisaPoin = remainingPoints ?: 0
+                bytes.addAll(formatKeyValue("Sisa Poin", "$sisaPoin Poin", maxChars).toByteArray(Charsets.ISO_8859_1).toList())
             }
 
             bytes.addAll(formatDivider('=', maxChars).toByteArray(Charsets.ISO_8859_1).toList())
@@ -305,5 +351,42 @@ class BluetoothPrinterHelper(private val context: Context) {
         } else {
             "$key\n" + " ".repeat(maxOf(0, width - value.length)) + value + "\n"
         }
+    }
+
+    private fun decodeBitmapToEscPosRaster(bitmap: android.graphics.Bitmap): ByteArray {
+        val width = bitmap.width
+        val height = bitmap.height
+        val widthBytes = (width + 7) / 8
+        val bytes = ByteArray(8 + widthBytes * height)
+        bytes[0] = 0x1D
+        bytes[1] = 0x76
+        bytes[2] = 0x30
+        bytes[3] = 0x00 // normal mode
+        bytes[4] = (widthBytes and 0xFF).toByte()
+        bytes[5] = ((widthBytes shr 8) and 0xFF).toByte()
+        bytes[6] = (height and 0xFF).toByte()
+        bytes[7] = ((height shr 8) and 0xFF).toByte()
+
+        var idx = 8
+        for (y in 0 until height) {
+            for (xb in 0 until widthBytes) {
+                var b = 0
+                for (bit in 0 until 8) {
+                    val x = xb * 8 + bit
+                    if (x < width) {
+                        val pixel = bitmap.getPixel(x, y)
+                        val r = (pixel shr 16) and 0xFF
+                        val g = (pixel shr 8) and 0xFF
+                        val bl = pixel and 0xFF
+                        val luminance = (0.299 * r + 0.587 * g + 0.114 * bl).toInt()
+                        if (luminance < 128) {
+                            b = b or (1 shl (7 - bit))
+                        }
+                    }
+                }
+                bytes[idx++] = b.toByte()
+            }
+        }
+        return bytes
     }
 }

@@ -8,7 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Password
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.*
@@ -155,7 +155,7 @@ fun ChangePasswordDialog(
                         visualTransformation = if (oldPinVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                         leadingIcon = {
-                            Icon(Icons.Outlined.Lock, contentDescription = null, tint = NeutralMedium)
+                            Icon(Icons.Outlined.Password, contentDescription = null, tint = NeutralMedium)
                         },
                         trailingIcon = {
                             IconButton(onClick = { oldPinVisible = !oldPinVisible }) {

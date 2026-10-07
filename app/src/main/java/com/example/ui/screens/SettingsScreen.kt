@@ -1,11 +1,18 @@
 package com.example.ui.screens
 
+import android.graphics.BitmapFactory
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -16,7 +23,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -32,6 +42,8 @@ import com.example.data.local.entity.UserEntity
 import com.example.ui.CafePosViewModel
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
+import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -56,8 +68,44 @@ fun SettingsScreen(
     var saveStatus by remember { mutableStateOf<String?>(null) }
     var taxSaveStatus by remember { mutableStateOf<String?>(null) }
 
+    val cafeLogoPath by viewModel.cafeLogoPath.collectAsState()
+    val logoBitmap = remember(cafeLogoPath) {
+        cafeLogoPath?.let { path ->
+            try {
+                val f = File(path)
+                if (f.exists()) BitmapFactory.decodeFile(f.absolutePath) else null
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            coroutineScope.launch {
+                try {
+                    val inputStream = context.contentResolver.openInputStream(uri)
+                    if (inputStream != null) {
+                        val logoFile = File(context.filesDir, "cafe_logo.png")
+                        val outputStream = FileOutputStream(logoFile)
+                        inputStream.copyTo(outputStream)
+                        inputStream.close()
+                        outputStream.close()
+                        viewModel.updateCafeLogoPath(logoFile.absolutePath)
+                        Toast.makeText(context, "Logo kafe berhasil diperbarui!", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Gagal mengunggah logo: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
     val allUsers by viewModel.repository.getAllUsers().collectAsState(initial = emptyList())
     var showAddUserDialog by remember { mutableStateOf(false) }
+    var userToDelete by remember { mutableStateOf<UserEntity?>(null) }
     var userToChangePassword by remember { mutableStateOf<UserEntity?>(null) }
     var showChangeMyPasswordDialog by remember { mutableStateOf(false) }
     var showResetPasswordDialog by remember { mutableStateOf(false) }
@@ -117,6 +165,94 @@ fun SettingsScreen(
                             Icon(Icons.Filled.Storefront, contentDescription = null, tint = CoffeeBrownPrimary)
                             Spacer(Modifier.width(8.dp))
                             Text("Profil Kafe & Header Struk", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        }
+
+                        // Logo Upload Section
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = NeutralLight.copy(alpha = 0.5f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, NeutralBorder.copy(alpha = 0.6f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    "Logo Kafe & Struk Pembayaran",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = CoffeeBrownDark
+                                )
+                                Text(
+                                    "Logo ini akan dicetak di bagian paling atas struk thermal & struk WhatsApp.",
+                                    fontSize = 11.sp,
+                                    color = NeutralMedium
+                                )
+
+                                if (logoBitmap != null) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Surface(
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = Color.White,
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, NeutralBorder),
+                                            shadowElevation = 2.dp,
+                                            modifier = Modifier.size(70.dp)
+                                        ) {
+                                            Image(
+                                                bitmap = logoBitmap.asImageBitmap(),
+                                                contentDescription = "Logo Kafe",
+                                                contentScale = ContentScale.Fit,
+                                                modifier = Modifier.padding(4.dp)
+                                            )
+                                        }
+
+                                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            FilledTonalButton(
+                                                onClick = {
+                                                    photoPickerLauncher.launch(
+                                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                                    )
+                                                },
+                                                shape = RoundedCornerShape(8.dp),
+                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                                            ) {
+                                                Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                Spacer(Modifier.width(4.dp))
+                                                Text("Ganti Logo", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                                            }
+
+                                            OutlinedButton(
+                                                onClick = {
+                                                    viewModel.updateCafeLogoPath(null)
+                                                    Toast.makeText(context, "Logo kafe dihapus", Toast.LENGTH_SHORT).show()
+                                                },
+                                                shape = RoundedCornerShape(8.dp),
+                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                                            ) {
+                                                Icon(Icons.Outlined.Delete, contentDescription = null, tint = CoffeeRed, modifier = Modifier.size(14.dp))
+                                                Spacer(Modifier.width(4.dp))
+                                                Text("Hapus Logo", color = CoffeeRed, fontSize = 11.5.sp)
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    OutlinedButton(
+                                        onClick = {
+                                            photoPickerLauncher.launch(
+                                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                            )
+                                        },
+                                        shape = RoundedCornerShape(10.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Icon(Icons.Filled.AddPhotoAlternate, contentDescription = null, tint = CoffeeBrownPrimary)
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Unggah Logo Kafe (PNG / JPG)", fontWeight = FontWeight.Bold, fontSize = 12.5.sp)
+                                    }
+                                }
+                            }
                         }
 
                         OutlinedTextField(
@@ -340,14 +476,27 @@ fun SettingsScreen(
 
                                     if (currentUser?.role == "ADMIN" && user.username != "admin") {
                                         IconButton(onClick = {
-                                            coroutineScope.launch {
-                                                viewModel.repository.deleteUser(user)
-                                            }
+                                            userToDelete = user
                                         }) {
                                             Icon(Icons.Outlined.Delete, contentDescription = "Hapus", tint = CoffeeRed, modifier = Modifier.size(18.dp))
                                         }
                                     }
                                 }
+                            }
+                        }
+
+                        if (currentUser?.role == "ADMIN") {
+                            FilledTonalButton(
+                                onClick = { showAddUserDialog = true },
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 10.dp)
+                                    .testTag("btn_add_user_prominent")
+                            ) {
+                                Icon(Icons.Filled.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Tambah Akun Baru", fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -604,38 +753,51 @@ fun SettingsScreen(
 
         AlertDialog(
             onDismissRequest = { showAddUserDialog = false },
-            title = { Text("Tambah Akun Kasir / Admin") },
+            title = { Text("Tambah Akun Baru", fontWeight = FontWeight.Bold) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(
                         value = newUsername,
                         onValueChange = { newUsername = it },
                         label = { Text("Username") },
+                        placeholder = { Text("Contoh: kasir2 / manajer") },
+                        singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = newName,
                         onValueChange = { newName = it },
                         label = { Text("Nama Lengkap") },
+                        placeholder = { Text("Contoh: Siti Rahma") },
+                        singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = newPin,
                         onValueChange = { newPin = it.filter { ch -> ch.isDigit() }.take(6) },
-                        label = { Text("PIN Masuk (4-6 Angka)") },
+                        label = { Text("Password / PIN Masuk (4-6 Angka)") },
+                        placeholder = { Text("1234") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+
+                    Text("Pilihan Role / Hak Akses:", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = NeutralMedium)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
                         FilterChip(
                             selected = newRole == "KASIR",
                             onClick = { newRole = "KASIR" },
-                            label = { Text("Kasir") }
+                            label = { Text("Kasir") },
+                            modifier = Modifier.weight(1f)
                         )
                         FilterChip(
                             selected = newRole == "ADMIN",
                             onClick = { newRole = "ADMIN" },
-                            label = { Text("Admin / Owner") }
+                            label = { Text("Admin / Owner") },
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
@@ -648,22 +810,55 @@ fun SettingsScreen(
                                 viewModel.repository.insertUser(
                                     UserEntity(
                                         username = newUsername.trim(),
-                                        name = newName.trim(),
+                                        name = newName.trim().ifBlank { newUsername.trim() },
                                         pin = newPin.trim(),
                                         role = newRole
                                     )
                                 )
+                                Toast.makeText(context, "Akun '$newUsername' ($newRole) berhasil dibuat!", Toast.LENGTH_SHORT).show()
                                 showAddUserDialog = false
                             }
+                        } else {
+                            Toast.makeText(context, "Username wajib diisi & PIN minimal 4 angka!", Toast.LENGTH_SHORT).show()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = CoffeeBrownPrimary)
                 ) {
-                    Text("Tambah")
+                    Text("Buat Akun", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showAddUserDialog = false }) { Text("Batal") }
+            }
+        )
+    }
+
+    // Delete User Confirmation Dialog
+    userToDelete?.let { user ->
+        AlertDialog(
+            onDismissRequest = { userToDelete = null },
+            title = { Text("Konfirmasi Hapus Akun", fontWeight = FontWeight.Bold) },
+            text = {
+                Text("Apakah Anda yakin ingin menghapus akun pengguna '${user.name}' (Username: ${user.username}, Role: ${user.role})? Tindakan ini tidak dapat dibatalkan.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        coroutineScope.launch {
+                            viewModel.repository.deleteUser(user)
+                            Toast.makeText(context, "Akun '${user.name}' berhasil dihapus!", Toast.LENGTH_SHORT).show()
+                            userToDelete = null
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = CoffeeRed)
+                ) {
+                    Text("Hapus Akun", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { userToDelete = null }) {
+                    Text("Batal")
+                }
             }
         )
     }

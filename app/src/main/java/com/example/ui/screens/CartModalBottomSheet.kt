@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -50,13 +51,22 @@ fun CartModalBottomSheet(
     val customerPhone by viewModel.customerPhone.collectAsState()
     val orderNotes by viewModel.orderNotes.collectAsState()
 
+    val members by viewModel.members.collectAsState()
+    val selectedMember by viewModel.selectedMember.collectAsState()
+    val redeemedPoints by viewModel.redeemedPoints.collectAsState()
+    val pointsEarnRate by viewModel.pointsEarnRate.collectAsState()
+    val pointsRedeemRate by viewModel.pointsRedeemRate.collectAsState()
+    var showSelectMemberDialog by remember { mutableStateOf(false) }
+
     val currency = remember {
         NumberFormat.getCurrencyInstance(Locale("id", "ID")).apply { maximumFractionDigits = 0 }
     }
 
     val taxAmount = (subtotal * taxRate) / 100.0
     val serviceAmount = (subtotal * serviceRate) / 100.0
-    val totalAmount = subtotal + taxAmount + serviceAmount - discountAmount
+    val pointsDiscount = redeemedPoints * pointsRedeemRate
+    val totalAmount = maxOf(0.0, subtotal + taxAmount + serviceAmount - discountAmount - pointsDiscount)
+    val pointsEarned = if (selectedMember != null) (totalAmount / pointsEarnRate.coerceAtLeast(1.0)).toInt() else 0
 
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
@@ -213,6 +223,123 @@ fun CartModalBottomSheet(
                                             )
                                         }
                                     }
+                                }
+                            }
+                        }
+                    }
+
+                    // MEMBER LOYALTY CARD
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (selectedMember != null) CoffeeAmberLight else NeutralLight.copy(alpha = 0.6f)
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (selectedMember != null) CoffeeAmber.copy(alpha = 0.5f) else NeutralBorder
+                            ),
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Filled.CardMembership,
+                                            contentDescription = null,
+                                            tint = if (selectedMember != null) CoffeeAmberDark else CoffeeBrownPrimary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(
+                                            "Member & Poin Loyalitas",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            color = CoffeeBrownDark
+                                        )
+                                    }
+
+                                    if (selectedMember != null) {
+                                        TextButton(onClick = { viewModel.selectMember(null) }) {
+                                            Text("Lepas", color = CoffeeRed, fontSize = 11.5.sp)
+                                        }
+                                    } else {
+                                        FilledTonalButton(
+                                            onClick = { showSelectMemberDialog = true },
+                                            shape = RoundedCornerShape(8.dp),
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                        ) {
+                                            Text("Pilih Member", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+
+                                if (selectedMember != null) {
+                                    val mem = selectedMember!!
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column {
+                                            Text(mem.name, fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
+                                            Text(mem.phone, fontSize = 11.5.sp, color = NeutralMedium)
+                                        }
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = Color.White
+                                        ) {
+                                            Text(
+                                                "⭐ ${mem.points} Poin (~${currency.format(mem.points * pointsRedeemRate)})",
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 12.sp,
+                                                color = CoffeeAmberDark,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                            )
+                                        }
+                                    }
+
+                                    // Point Redemption Options if member has points
+                                    if (mem.points > 0) {
+                                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Text(
+                                                "Tukar Poin untuk Potongan Belanja (1 Poin = ${currency.format(pointsRedeemRate)}):",
+                                                fontSize = 11.sp,
+                                                color = CoffeeBrownDark
+                                            )
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                listOf(0, 50, 100, mem.points).distinct().forEach { pts ->
+                                                    FilterChip(
+                                                        selected = redeemedPoints == pts,
+                                                        onClick = { viewModel.setRedeemedPoints(pts) },
+                                                        label = {
+                                                            Text(if (pts == 0) "Tanpa Tukar" else if (pts == mem.points) "Semua ($pts)" else "$pts Poin")
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Text(
+                                        "🎁 Estimasi poin didapat dari transaksi ini: +$pointsEarned Poin",
+                                        fontSize = 11.sp,
+                                        color = CoffeeGreen,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                } else {
+                                    Text(
+                                        "Hubungkan pelanggan member untuk mendapatkan 1 poin setiap belanja ${currency.format(pointsEarnRate)}.",
+                                        fontSize = 11.5.sp,
+                                        color = NeutralMedium
+                                    )
                                 }
                             }
                         }
@@ -470,6 +597,12 @@ fun CartModalBottomSheet(
                                 Text("-${currency.format(discountAmount)}", color = CoffeeRed)
                             }
                         }
+                        if (pointsDiscount > 0) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Tukar Poin ($redeemedPoints Poin)", color = CoffeeGreen)
+                                Text("-${currency.format(pointsDiscount)}", color = CoffeeGreen, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
                         Spacer(Modifier.height(6.dp))
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("Total Bayar", fontWeight = FontWeight.Bold, fontSize = 17.sp)
@@ -509,5 +642,92 @@ fun CartModalBottomSheet(
                 Spacer(Modifier.height(16.dp))
             }
         }
+    }
+
+    // Member Selection Dialog
+    if (showSelectMemberDialog) {
+        var memberSearchQuery by remember { mutableStateOf("") }
+        val filteredMemberList = remember(members, memberSearchQuery) {
+            if (memberSearchQuery.isBlank()) members
+            else members.filter {
+                it.name.contains(memberSearchQuery, ignoreCase = true) ||
+                it.phone.contains(memberSearchQuery)
+            }
+        }
+
+        AlertDialog(
+            onDismissRequest = { showSelectMemberDialog = false },
+            title = {
+                Text("Pilih Pelanggan Member", fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedTextField(
+                        value = memberSearchQuery,
+                        onValueChange = { memberSearchQuery = it },
+                        placeholder = { Text("Cari nama / nomor HP...") },
+                        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    if (filteredMemberList.isEmpty()) {
+                        Text(
+                            "Belum ada member yang cocok.",
+                            fontSize = 12.sp,
+                            color = NeutralMedium,
+                            modifier = Modifier.padding(vertical = 12.dp)
+                        )
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 240.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            items(filteredMemberList, key = { it.id }) { mem ->
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = NeutralLight.copy(alpha = 0.7f),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            viewModel.selectMember(mem)
+                                            showSelectMemberDialog = false
+                                        }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(10.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column {
+                                            Text(mem.name, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                            Text(mem.phone, fontSize = 11.sp, color = NeutralMedium)
+                                        }
+                                        Text(
+                                            "⭐ ${mem.points} Poin",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            color = CoffeeAmberDark
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showSelectMemberDialog = false }) {
+                    Text("Tutup")
+                }
+            }
+        )
     }
 }

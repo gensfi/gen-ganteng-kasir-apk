@@ -28,6 +28,12 @@ fun MainAppScaffold(viewModel: CafePosViewModel) {
     val currentUser by viewModel.currentUser.collectAsState()
     val lastTransaction by viewModel.lastTransaction.collectAsState()
 
+    // Show full Login Screen if not logged in
+    if (currentUser == null) {
+        LoginScreen(viewModel = viewModel)
+        return
+    }
+
     var showCartSheet by remember { mutableStateOf(false) }
     var showPaymentDialog by remember { mutableStateOf(false) }
     var showMoreMenuSheet by remember { mutableStateOf(false) }
@@ -119,23 +125,15 @@ fun MainAppScaffold(viewModel: CafePosViewModel) {
                             icon = { Icon(Icons.Filled.ConfirmationNumber, contentDescription = null) },
                             label = { Text("Voucher") }
                         )
+                        NavigationRailItem(
+                            selected = currentScreen == CafeScreen.MEMBER_MANAGEMENT,
+                            onClick = { viewModel.navigateTo(CafeScreen.MEMBER_MANAGEMENT) },
+                            icon = { Icon(Icons.Filled.CardMembership, contentDescription = null) },
+                            label = { Text("Member") }
+                        )
                     }
 
                     Spacer(Modifier.weight(1f))
-
-                    NavigationRailItem(
-                        selected = false,
-                        onClick = { showChangePasswordDialog = true },
-                        icon = { Icon(Icons.Filled.Key, contentDescription = "Ganti PIN") },
-                        label = { Text("Ganti PIN") }
-                    )
-
-                    NavigationRailItem(
-                        selected = false,
-                        onClick = { viewModel.switchUser() },
-                        icon = { Icon(Icons.Outlined.Lock, contentDescription = "Ganti Akun") },
-                        label = { Text("Kunci") }
-                    )
                     Spacer(Modifier.height(16.dp))
                 }
             }
@@ -169,22 +167,8 @@ fun MainAppScaffold(viewModel: CafePosViewModel) {
                                     selected = currentScreen == CafeScreen.CASHIER_SUMMARY,
                                     onClick = { viewModel.navigateTo(CafeScreen.CASHIER_SUMMARY) },
                                     icon = { Icon(Icons.Filled.AccountBalanceWallet, contentDescription = null) },
-                                    label = { Text("Rekap", maxLines = 1, fontSize = 11.sp) },
+                                    label = { Text("Rekap Kas", maxLines = 1, fontSize = 12.sp) },
                                     modifier = Modifier.testTag("nav_cashier_summary")
-                                )
-                                NavigationBarItem(
-                                    selected = false,
-                                    onClick = { showChangePasswordDialog = true },
-                                    icon = { Icon(Icons.Filled.Key, contentDescription = null) },
-                                    label = { Text("PIN", maxLines = 1, fontSize = 11.sp) },
-                                    modifier = Modifier.testTag("nav_change_pin")
-                                )
-                                NavigationBarItem(
-                                    selected = false,
-                                    onClick = { viewModel.switchUser() },
-                                    icon = { Icon(Icons.Outlined.Lock, contentDescription = null) },
-                                    label = { Text("Akun", maxLines = 1, fontSize = 11.sp) },
-                                    modifier = Modifier.testTag("nav_switch_user")
                                 )
                             } else {
                                 NavigationBarItem(
@@ -228,7 +212,7 @@ fun MainAppScaffold(viewModel: CafePosViewModel) {
                         .fillMaxSize()
                         .padding(innerPadding)
                 ) {
-                    if (isKasir && currentScreen !in listOf(CafeScreen.POS, CafeScreen.PRINTER_SETTINGS, CafeScreen.CASHIER_SUMMARY)) {
+                    if (isKasir && currentScreen !in listOf(CafeScreen.POS, CafeScreen.PRINTER_SETTINGS, CafeScreen.CASHIER_SUMMARY, CafeScreen.MEMBER_MANAGEMENT)) {
                         AccessDeniedScreen(
                             onLoginAdmin = { viewModel.switchUser() }
                         )
@@ -267,6 +251,10 @@ fun MainAppScaffold(viewModel: CafePosViewModel) {
                                 onBack = { viewModel.navigateTo(CafeScreen.POS) }
                             )
                             CafeScreen.VOUCHER_MANAGEMENT -> VoucherManagementScreen(
+                                viewModel = viewModel,
+                                onBack = { viewModel.navigateTo(CafeScreen.POS) }
+                            )
+                            CafeScreen.MEMBER_MANAGEMENT -> MemberManagementScreen(
                                 viewModel = viewModel,
                                 onBack = { viewModel.navigateTo(CafeScreen.POS) }
                             )
@@ -309,14 +297,6 @@ fun MainAppScaffold(viewModel: CafePosViewModel) {
         )
     }
 
-    // PIN Authentication Dialog when logged out / switching user
-    if (currentUser == null) {
-        PinLoginDialog(
-            viewModel = viewModel,
-            onSuccess = { /* Logged in */ }
-        )
-    }
-
     // Change Password / PIN Dialog
     if (showChangePasswordDialog) {
         ChangePasswordDialog(
@@ -342,6 +322,16 @@ fun MainAppScaffold(viewModel: CafePosViewModel) {
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
                     color = CoffeeBrownDark
+                )
+
+                ListItem(
+                    headlineContent = { Text("Member & Poin Loyalitas") },
+                    supportingContent = { Text("Kelola pelanggan setia & aturan perolehan poin belanja") },
+                    leadingContent = { Icon(Icons.Filled.CardMembership, contentDescription = null, tint = CoffeeAmber) },
+                    modifier = Modifier.clickable {
+                        showMoreMenuSheet = false
+                        viewModel.navigateTo(CafeScreen.MEMBER_MANAGEMENT)
+                    }
                 )
 
                 ListItem(
@@ -411,7 +401,7 @@ fun AccessDeniedScreen(onLoginAdmin: () -> Unit) {
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    Icons.Filled.Lock,
+                    Icons.Filled.AdminPanelSettings,
                     contentDescription = null,
                     tint = CoffeeRed,
                     modifier = Modifier.size(44.dp)
@@ -446,7 +436,7 @@ fun AccessDeniedScreen(onLoginAdmin: () -> Unit) {
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.height(48.dp)
             ) {
-                Icon(Icons.Filled.Key, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(Icons.Filled.AdminPanelSettings, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Login sebagai Admin (PIN 1234)", fontWeight = FontWeight.Bold)
             }

@@ -21,5 +21,8 @@ data class TransactionEntity(
     val customerName: String? = null,
     val customerPhone: String? = null,
     val notes: String? = null,
+    val memberId: Long? = null,
+    val pointsEarned: Int = 0,
+    val pointsRedeemed: Int = 0,
     val isSyncedToSheets: Boolean = false
 )

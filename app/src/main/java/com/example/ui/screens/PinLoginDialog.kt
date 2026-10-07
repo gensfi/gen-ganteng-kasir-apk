@@ -55,7 +55,7 @@ fun PinLoginDialog(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        Icons.Filled.Lock,
+                        Icons.Filled.Password,
                         contentDescription = null,
                         tint = CoffeeBrownPrimary,
                         modifier = Modifier.size(28.dp)

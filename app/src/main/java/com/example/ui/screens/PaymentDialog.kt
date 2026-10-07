@@ -41,16 +41,23 @@ fun PaymentDialog(
     val taxRate by viewModel.taxRate.collectAsState()
     val serviceRate by viewModel.serviceRate.collectAsState()
     val discountAmount by viewModel.discountAmount.collectAsState()
+    val redeemedPoints by viewModel.redeemedPoints.collectAsState()
+    val pointsRedeemRate by viewModel.pointsRedeemRate.collectAsState()
 
     val taxAmount = (subtotal * taxRate) / 100.0
     val serviceAmount = (subtotal * serviceRate) / 100.0
-    val totalAmount = subtotal + taxAmount + serviceAmount - discountAmount
+    val pointsDiscount = redeemedPoints * pointsRedeemRate
+    val totalAmount = maxOf(0.0, subtotal + taxAmount + serviceAmount - discountAmount - pointsDiscount)
 
     val currency = remember {
         NumberFormat.getCurrencyInstance(Locale("id", "ID")).apply { maximumFractionDigits = 0 }
     }
 
-    var selectedTab by remember { mutableStateOf("CASH") } // CASH, QRIS, TRANSFER
+    val customerName by viewModel.customerName.collectAsState()
+    val customerPhone by viewModel.customerPhone.collectAsState()
+    val selectedMember by viewModel.selectedMember.collectAsState()
+
+    var selectedTab by remember { mutableStateOf("CASH") } // CASH, QRIS, ONLINE
     var cashGivenText by remember { mutableStateOf(totalAmount.toLong().toString()) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isProcessing by remember { mutableStateOf(false) }
@@ -134,11 +141,11 @@ fun PaymentDialog(
                         onClick = { selectedTab = "QRIS" }
                     )
                     PaymentMethodTab(
-                        title = "Transfer",
-                        icon = Icons.Filled.AccountBalance,
-                        isSelected = selectedTab == "TRANSFER",
-                        modifier = Modifier.weight(1f),
-                        onClick = { selectedTab = "TRANSFER" }
+                        title = "Pesanan Online",
+                        icon = Icons.Filled.ShoppingBag,
+                        isSelected = selectedTab == "ONLINE",
+                        modifier = Modifier.weight(1.2f),
+                        onClick = { selectedTab = "ONLINE" }
                     )
                 }
 
@@ -240,20 +247,50 @@ fun PaymentDialog(
                         }
                     }
 
-                    "TRANSFER" -> {
+                    "ONLINE", "PESANAN_ONLINE", "TRANSFER" -> {
                         Column(modifier = Modifier.padding(vertical = 8.dp)) {
-                            Text("Transfer Bank Manual:", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Pesanan Online (GoFood / GrabFood / ShopeeFood):", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                             Spacer(Modifier.height(6.dp))
                             Surface(
                                 shape = RoundedCornerShape(10.dp),
                                 color = NeutralLight,
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Column(modifier = Modifier.padding(10.dp)) {
-                                    Text("BCA: 873-019-2810 (Kopi Senja)", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                    Text("Mandiri: 137-00-1928-111 (Kopi Senja)", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                    Text("Pastikan nominal transfer sesuai dengan total tagihan.", fontSize = 11.sp, color = NeutralMedium)
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Filled.DeliveryDining, contentDescription = null, tint = BrightOrangePrimary, modifier = Modifier.size(22.dp))
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Pesanan Platform Online", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = CoffeeBrownDark)
+                                    }
+                                    Spacer(Modifier.height(4.dp))
+                                    Text("Pesanan telah dibayar via aplikasi online pelanggan. Struk transaksi dapat dicetak atau dikirim via WhatsApp.", fontSize = 11.5.sp, color = NeutralMedium)
                                 }
+                            }
+                        }
+                    }
+                }
+
+                // Customer & WhatsApp Info Banner
+                val activeCustomerName = customerName.ifBlank { selectedMember?.name ?: "" }
+                val activeCustomerPhone = customerPhone.ifBlank { selectedMember?.phone ?: "" }
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = PrimaryContainer.copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Filled.Share, contentDescription = null, tint = CoffeeGreen, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Column {
+                            Text("Kirim Struk WhatsApp Pelanggan:", fontSize = 10.5.sp, color = NeutralMedium, fontWeight = FontWeight.SemiBold)
+                            if (activeCustomerPhone.isNotBlank()) {
+                                Text("📱 $activeCustomerPhone ${if (activeCustomerName.isNotBlank()) "($activeCustomerName)" else ""}", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = CoffeeBrownDark)
+                                Text("Struk akan otomatis dikirim via WhatsApp setelah pembayaran", fontSize = 10.sp, color = CoffeeGreen)
+                            } else {
+                                Text("Belum ada no. WA pelanggan (dapat diisi nanti di struk)", fontSize = 11.sp, color = NeutralDark)
                             }
                         }
                     }

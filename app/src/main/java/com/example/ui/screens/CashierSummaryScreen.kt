@@ -93,8 +93,8 @@ fun CashierSummaryScreen(
     val qrisTransactions = filteredTransactions.filter { it.paymentMethod.equals("QRIS", ignoreCase = true) }
     val qrisTotal = qrisTransactions.sumOf { it.totalAmount }
 
-    val transferTransactions = filteredTransactions.filter { it.paymentMethod.equals("TRANSFER", ignoreCase = true) }
-    val transferTotal = transferTransactions.sumOf { it.totalAmount }
+    val onlineTransactions = filteredTransactions.filter { it.paymentMethod.equals("ONLINE", true) || it.paymentMethod.equals("PESANAN_ONLINE", true) || it.paymentMethod.equals("TRANSFER", true) }
+    val onlineTotal = onlineTransactions.sumOf { it.totalAmount }
 
     Scaffold(
         topBar = {
@@ -132,9 +132,9 @@ fun CashierSummaryScreen(
                                     appendLine("Total Uang  : ${currency.format(totalMoneyReceived)}")
                                     appendLine("--------------------------------")
                                     appendLine("RINCIAN METODE BAYAR:")
-                                    appendLine("Tunai/Cash  : ${currency.format(cashTotal)} (${cashTransactions.size}x)")
-                                    appendLine("QRIS        : ${currency.format(qrisTotal)} (${qrisTransactions.size}x)")
-                                    appendLine("Transfer    : ${currency.format(transferTotal)} (${transferTransactions.size}x)")
+                                    appendLine("Tunai/Cash     : ${currency.format(cashTotal)} (${cashTransactions.size}x)")
+                                    appendLine("QRIS           : ${currency.format(qrisTotal)} (${qrisTransactions.size}x)")
+                                    appendLine("Pesanan Online : ${currency.format(onlineTotal)} (${onlineTransactions.size}x)")
                                     appendLine("--------------------------------")
                                     appendLine("Kas Laci Fisik : ${currency.format(cashTotal)}")
                                     appendLine("================================")
@@ -292,13 +292,13 @@ fun CashierSummaryScreen(
                             containerColor = BrightPeach
                         )
 
-                        // 3. Transfer Bank
+                        // 3. Pesanan Online
                         PaymentMethodRow(
-                            icon = Icons.Filled.AccountBalance,
+                            icon = Icons.Filled.ShoppingBag,
                             iconColor = BrightTeal,
-                            title = "Transfer Bank / Non Tunai",
-                            subtitle = "${transferTransactions.size} Transaksi",
-                            amount = currency.format(transferTotal),
+                            title = "Pesanan Online",
+                            subtitle = "${onlineTransactions.size} Transaksi • GoFood/Grab/Shopee",
+                            amount = currency.format(onlineTotal),
                             containerColor = BrightTealLight
                         )
                     }
@@ -324,9 +324,9 @@ fun CashierSummaryScreen(
                                     appendLine("Total Uang  : ${currency.format(totalMoneyReceived)}")
                                     appendLine("--------------------------------")
                                     appendLine("RINCIAN METODE BAYAR:")
-                                    appendLine("Tunai/Cash  : ${currency.format(cashTotal)} (${cashTransactions.size}x)")
-                                    appendLine("QRIS        : ${currency.format(qrisTotal)} (${qrisTransactions.size}x)")
-                                    appendLine("Transfer    : ${currency.format(transferTotal)} (${transferTransactions.size}x)")
+                                    appendLine("Tunai/Cash     : ${currency.format(cashTotal)} (${cashTransactions.size}x)")
+                                    appendLine("QRIS           : ${currency.format(qrisTotal)} (${qrisTransactions.size}x)")
+                                    appendLine("Pesanan Online : ${currency.format(onlineTotal)} (${onlineTransactions.size}x)")
                                     appendLine("--------------------------------")
                                     appendLine("Kas Laci Fisik : ${currency.format(cashTotal)}")
                                     appendLine("================================")
@@ -356,7 +356,7 @@ fun CashierSummaryScreen(
                             .weight(1f)
                             .height(48.dp)
                     ) {
-                        Icon(Icons.Outlined.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Filled.Logout, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("Tutup Shift Kasir", fontWeight = FontWeight.SemiBold)
                     }

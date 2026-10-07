@@ -32,7 +32,8 @@ object PdfReportGenerator {
         val totalNetProfit: Double,
         val cashTotal: Double,
         val qrisTotal: Double,
-        val transferTotal: Double
+        val onlineTotal: Double = 0.0,
+        val transferTotal: Double = onlineTotal
     )
 
     fun generateSalesPdf(context: Context, data: PdfReportData): File? {
@@ -119,11 +120,12 @@ object PdfReportGenerator {
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
         val cashTrx = data.transactions.count { it.paymentMethod.equals("CASH", true) }
         val qrisTrx = data.transactions.count { it.paymentMethod.equals("QRIS", true) }
-        val transferTrx = data.transactions.count { it.paymentMethod.equals("TRANSFER", true) }
+        val onlineTrx = data.transactions.count { it.paymentMethod.equals("ONLINE", true) || it.paymentMethod.equals("PESANAN_ONLINE", true) || it.paymentMethod.equals("TRANSFER", true) }
+        val effectiveOnlineTotal = if (data.onlineTotal > 0) data.onlineTotal else data.transferTotal
 
         canvas.drawText("Tunai (Cash): ${rupiahFormat.format(data.cashTotal)} ($cashTrx trx)", 40f, yPos + 16f, paint)
-        canvas.drawText("QRIS: ${rupiahFormat.format(data.qrisTotal)} ($qrisTrx trx)", 230f, yPos + 16f, paint)
-        canvas.drawText("Transfer Bank: ${rupiahFormat.format(data.transferTotal)} ($transferTrx trx)", 390f, yPos + 16f, paint)
+        canvas.drawText("QRIS: ${rupiahFormat.format(data.qrisTotal)} ($qrisTrx trx)", 220f, yPos + 16f, paint)
+        canvas.drawText("Pesanan Online: ${rupiahFormat.format(effectiveOnlineTotal)} ($onlineTrx trx)", 370f, yPos + 16f, paint)
 
         yPos += 40f
 

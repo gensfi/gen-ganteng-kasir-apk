@@ -171,7 +171,8 @@ fun GoogleSheetsScreen(
     val totalRevenue = selectedTransactions.sumOf { it.totalAmount }
     val cashTotal = selectedTransactions.filter { it.paymentMethod.equals("CASH", true) }.sumOf { it.totalAmount }
     val qrisTotal = selectedTransactions.filter { it.paymentMethod.equals("QRIS", true) }.sumOf { it.totalAmount }
-    val transferTotal = selectedTransactions.filter { it.paymentMethod.equals("TRANSFER", true) }.sumOf { it.totalAmount }
+    val onlineTotal = selectedTransactions.filter { it.paymentMethod.equals("ONLINE", true) || it.paymentMethod.equals("PESANAN_ONLINE", true) || it.paymentMethod.equals("TRANSFER", true) }.sumOf { it.totalAmount }
+    val transferTotal = onlineTotal
 
     fun generatePdfReport(openAfter: Boolean) {
         coroutineScope.launch {
@@ -200,7 +201,8 @@ fun GoogleSheetsScreen(
                     totalNetProfit = netProfit,
                     cashTotal = cashTotal,
                     qrisTotal = qrisTotal,
-                    transferTotal = transferTotal
+                    onlineTotal = onlineTotal,
+                    transferTotal = onlineTotal
                 )
 
                 val file = PdfReportGenerator.generateSalesPdf(context, reportData)
@@ -422,7 +424,7 @@ fun GoogleSheetsScreen(
 
                                 Spacer(Modifier.height(6.dp))
                                 Text(
-                                    text = "Rincian: Tunai ${currency.format(cashTotal)} • QRIS ${currency.format(qrisTotal)} • Transfer ${currency.format(transferTotal)}",
+                                    text = "Rincian: Tunai ${currency.format(cashTotal)} • QRIS ${currency.format(qrisTotal)} • Online ${currency.format(onlineTotal)}",
                                     fontSize = 10.5.sp,
                                     color = NeutralMedium
                                 )
