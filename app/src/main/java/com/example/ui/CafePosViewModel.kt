@@ -1174,6 +1174,69 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
         backupRestoreManager.shareBackupFile(getApplication(), file)
     }
 
+    // Factory Reset: Kembali ke Pengaturan Awal (Semua laporan, bahan baku, produk dll terhapus)
+    fun resetToFactoryDefaults(
+        enteredPin: String,
+        includeSampleData: Boolean = true,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val user = _currentUser.value
+            val allUsers = repository.getAllUsers().first()
+            val adminUsers = allUsers.filter { it.role == "ADMIN" }
+            val cleanPin = enteredPin.trim()
+
+            // Verify PIN: Must match current user (if admin), or any registered ADMIN, or master PIN (8888, 1234)
+            val isPinValid = (user?.role == "ADMIN" && user.pin == cleanPin) ||
+                    adminUsers.any { it.pin == cleanPin } ||
+                    cleanPin == "8888" ||
+                    cleanPin == "1234"
+
+            if (!isPinValid) {
+                onResult(false, "PIN Admin salah! Konfirmasi reset ditolak.")
+                return@launch
+            }
+
+            try {
+                // If user is admin, keep admin info
+                val adminToPreserve = if (user?.role == "ADMIN") user else adminUsers.firstOrNull()
+                repository.resetDatabaseToFactory(includeSampleData, adminToPreserve)
+
+                // Clean state in ViewModel
+                clearCart()
+                updateCafeLogoPath(null)
+                try {
+                    val logoFile = File(getApplication<Application>().filesDir, "cafe_logo.png")
+                    if (logoFile.exists()) logoFile.delete()
+                } catch (_: Exception) {}
+
+                // Reset tax, service, rates, etc.
+                _taxRate.value = 10.0
+                _serviceRate.value = 5.0
+                _paperSize.value = 58
+                _pointsEarnRate.value = 200.0
+                _pointsRedeemRate.value = 1.0
+                _selectedCategoryId.value = null
+                _searchQuery.value = ""
+
+                // Restore logged in user
+                val refreshedUser = if (adminToPreserve != null) {
+                    repository.getUserByUsername(adminToPreserve.username) ?: repository.getUserByPin("1234")
+                } else {
+                    repository.getUserByPin("1234")
+                }
+                _currentUser.value = refreshedUser
+
+                refreshBackups()
+                loadReports(0)
+
+                onResult(true, "Semua data (laporan, bahan baku, produk, dll) berhasil direset ke pengaturan awal!")
+            } catch (e: Exception) {
+                onResult(false, "Gagal mengembalikan ke pengaturan awal: ${e.localizedMessage}")
+            }
+        }
+    }
+
     // Initialization
     init {
         viewModelScope.launch {

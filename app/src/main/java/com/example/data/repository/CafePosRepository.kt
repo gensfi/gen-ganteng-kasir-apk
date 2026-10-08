@@ -283,4 +283,8 @@ class CafePosRepository(
     suspend fun syncToGoogleSheets(): SyncResult {
         return sheetsSyncService.syncPendingTransactions()
     }
+
+    suspend fun resetDatabaseToFactory(includeSampleData: Boolean = true, preserveAdminUser: UserEntity? = null) {
+        com.example.data.local.InitialDataSeeder.resetDatabaseToFactory(database, includeSampleData, preserveAdminUser)
+    }
 }

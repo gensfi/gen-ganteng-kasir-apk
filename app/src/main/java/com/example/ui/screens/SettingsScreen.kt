@@ -34,6 +34,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.backup.BackupFileInfo
@@ -120,6 +121,13 @@ fun SettingsScreen(
     var exportedJson by remember { mutableStateOf<String?>(null) }
     var showRestoreDialog by remember { mutableStateOf(false) }
     var restoreJsonInput by remember { mutableStateOf("") }
+
+    // Kembali ke Pengaturan Awal (Factory Reset) states
+    var showResetToFactoryDialog by remember { mutableStateOf(false) }
+    var resetAdminPinInput by remember { mutableStateOf("") }
+    var resetPinError by remember { mutableStateOf<String?>(null) }
+    var resetIncludeSampleData by remember { mutableStateOf(true) }
+    var isResetting by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         cafeName = viewModel.repository.getSetting("cafe_name") ?: "Kopi Kenangan Senja"
@@ -744,6 +752,120 @@ fun SettingsScreen(
                     }
                 }
             }
+
+            // Kembali ke Pengaturan Awal (Factory Reset) Card
+            item {
+                Card(
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, CoffeeRed.copy(alpha = 0.35f)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Filled.RestartAlt,
+                                    contentDescription = null,
+                                    tint = CoffeeRed,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    "Kembali ke Pengaturan Awal",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = CoffeeRed
+                                )
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = CoffeeRedLight
+                            ) {
+                                Text(
+                                    text = "ZONA ADMIN",
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = CoffeeRed,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = "Fitur ini akan menghapus dan mereset seluruh data aplikasi: semua laporan & riwayat transaksi, bahan baku & resep inventaris, produk menu & kategori, diskon voucher, serta data member.",
+                            fontSize = 12.sp,
+                            color = NeutralDark,
+                            lineHeight = 17.sp
+                        )
+
+                        val isAdmin = currentUser?.role == "ADMIN"
+
+                        if (!isAdmin) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = NeutralLight,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Lock,
+                                        contentDescription = null,
+                                        tint = NeutralMedium,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        text = "Tombol dikunci. Hanya akun Owner / Admin yang memiliki izin untuk mereset data.",
+                                        fontSize = 11.5.sp,
+                                        color = NeutralMedium
+                                    )
+                                }
+                            }
+                        }
+
+                        Button(
+                            onClick = {
+                                if (isAdmin) {
+                                    resetAdminPinInput = ""
+                                    resetPinError = null
+                                    resetIncludeSampleData = true
+                                    showResetToFactoryDialog = true
+                                } else {
+                                    Toast.makeText(context, "Hanya akun Admin yang dapat melakukan reset!", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            enabled = isAdmin,
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = CoffeeRed,
+                                disabledContainerColor = NeutralBorder
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("btn_reset_to_factory")
+                        ) {
+                            Icon(Icons.Filled.DeleteForever, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "Kembali ke Pengaturan Awal",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -969,6 +1091,208 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { fileToRestore = null }) {
+                    Text("Batal")
+                }
+            }
+        )
+    }
+
+    // Reset ke Pengaturan Awal (Factory Reset) Confirmation & PIN Dialog
+    if (showResetToFactoryDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!isResetting) {
+                    showResetToFactoryDialog = false
+                    resetPinError = null
+                }
+            },
+            icon = {
+                Icon(
+                    Icons.Filled.WarningAmber,
+                    contentDescription = null,
+                    tint = CoffeeRed,
+                    modifier = Modifier.size(36.dp)
+                )
+            },
+            title = {
+                Text(
+                    "Kembali ke Pengaturan Awal?",
+                    fontWeight = FontWeight.Bold,
+                    color = CoffeeRed,
+                    fontSize = 17.sp
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = CoffeeRedLight,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text(
+                                "⚠️ PERINGATAN: Tindakan tidak dapat dibatalkan!",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.5.sp,
+                                color = CoffeeRed
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "• Semua laporan transaksi & kasir akan terhapus\n• Semua bahan baku & resep akan terhapus\n• Semua produk menu & kategori akan terhapus\n• Semua voucher & data member akan terhapus",
+                                fontSize = 11.sp,
+                                color = CoffeeRed
+                            )
+                        }
+                    }
+
+                    Text(
+                        "Pilih mode pemulihan data setelah reset:",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = CoffeeBrownDark
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { resetIncludeSampleData = true }
+                            .background(
+                                if (resetIncludeSampleData) PrimaryContainer.copy(alpha = 0.5f) else NeutralLight.copy(alpha = 0.4f),
+                                RoundedCornerShape(8.dp)
+                            )
+                            .padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = resetIncludeSampleData,
+                            onClick = { resetIncludeSampleData = true }
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Column {
+                            Text("Data Awal Bawaan (Default)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text("Muat menu & bahan baku contoh bawaan sistem", fontSize = 10.5.sp, color = NeutralMedium)
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { resetIncludeSampleData = false }
+                            .background(
+                                if (!resetIncludeSampleData) PrimaryContainer.copy(alpha = 0.5f) else NeutralLight.copy(alpha = 0.4f),
+                                RoundedCornerShape(8.dp)
+                            )
+                            .padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = !resetIncludeSampleData,
+                            onClick = { resetIncludeSampleData = false }
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Column {
+                            Text("Bersih Total (Database Kosong)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text("Mulai dari nol tanpa menu/bahan baku contoh", fontSize = 10.5.sp, color = NeutralMedium)
+                        }
+                    }
+
+                    Spacer(Modifier.height(2.dp))
+
+                    Text(
+                        "Konfirmasi PIN Admin:",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = CoffeeBrownDark
+                    )
+
+                    OutlinedTextField(
+                        value = resetAdminPinInput,
+                        onValueChange = {
+                            resetAdminPinInput = it
+                            resetPinError = null
+                        },
+                        label = { Text("Masukkan PIN Admin") },
+                        placeholder = { Text("PIN Admin (misal: 1234)") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("input_admin_reset_pin"),
+                        isError = resetPinError != null
+                    )
+
+                    resetPinError?.let { err ->
+                        Text(
+                            text = err,
+                            color = CoffeeRed,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    if (isResetting) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = CoffeeRed)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Mereset seluruh data...", fontSize = 11.5.sp, color = NeutralMedium)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (resetAdminPinInput.isBlank()) {
+                            resetPinError = "PIN Admin wajib diisi!"
+                            return@Button
+                        }
+                        isResetting = true
+                        viewModel.resetToFactoryDefaults(
+                            enteredPin = resetAdminPinInput,
+                            includeSampleData = resetIncludeSampleData
+                        ) { success, msg ->
+                            isResetting = false
+                            if (success) {
+                                coroutineScope.launch {
+                                    cafeName = viewModel.repository.getSetting("cafe_name") ?: "Rencana Kopi"
+                                    cafeAddress = viewModel.repository.getSetting("cafe_address") ?: "Jl. Malioboro No. 45, Yogyakarta"
+                                    cafePhone = viewModel.repository.getSetting("cafe_phone") ?: "0812-3456-7890"
+                                    receiptFooter = viewModel.repository.getSetting("receipt_footer") ?: "Terima kasih atas kunjungan Anda!\nFollow IG: @rencanakopi.id"
+                                    taxPercentage = viewModel.repository.getSetting("tax_percentage") ?: "10.0"
+                                    servicePercentage = viewModel.repository.getSetting("service_charge_percentage") ?: "5.0"
+                                }
+                                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                showResetToFactoryDialog = false
+                            } else {
+                                resetPinError = msg
+                            }
+                        }
+                    },
+                    enabled = !isResetting,
+                    colors = ButtonDefaults.buttonColors(containerColor = CoffeeRed),
+                    modifier = Modifier.testTag("btn_confirm_factory_reset")
+                ) {
+                    Text("Ya, Hapus & Reset Semua", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showResetToFactoryDialog = false
+                        resetPinError = null
+                    },
+                    enabled = !isResetting
+                ) {
                     Text("Batal")
                 }
             }

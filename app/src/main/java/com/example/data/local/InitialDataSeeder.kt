@@ -55,7 +55,86 @@ object InitialDataSeeder {
         )
         defaultSettings.forEach { database.settingDao().setSetting(it) }
 
-        // 3. Categories
+        // 3, 4, 5. Categories, Ingredients, Menus & Recipes
+        seedSampleCategoriesAndProducts(database)
+        seedDefaultVouchersIfNeeded(database)
+    }
+
+    suspend fun resetDatabaseToFactory(
+        database: AppDatabase,
+        includeSampleData: Boolean = true,
+        preserveAdminUser: UserEntity? = null
+    ) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        // Clear all tables (Semua transaksi, laporan, bahan baku, produk, voucher, member terhapus)
+        database.clearAllTables()
+
+        // 1. Users Default
+        if (preserveAdminUser != null) {
+            database.userDao().insertUser(
+                UserEntity(
+                    username = preserveAdminUser.username,
+                    name = preserveAdminUser.name,
+                    pin = preserveAdminUser.pin,
+                    role = "ADMIN"
+                )
+            )
+            if (preserveAdminUser.username.lowercase() != "admin") {
+                database.userDao().insertUser(
+                    UserEntity(
+                        username = "admin",
+                        name = "Owner / Manager",
+                        pin = "1234",
+                        role = "ADMIN"
+                    )
+                )
+            }
+        } else {
+            database.userDao().insertUser(
+                UserEntity(
+                    username = "admin",
+                    name = "Owner / Manager",
+                    pin = "1234",
+                    role = "ADMIN"
+                )
+            )
+        }
+
+        database.userDao().insertUser(
+            UserEntity(
+                username = "kasir",
+                name = "Kasir 1",
+                pin = "1111",
+                role = "KASIR"
+            )
+        )
+
+        // 2. Default Cafe Settings
+        val defaultSettings = listOf(
+            SettingEntity("cafe_name", "Rencana Kopi"),
+            SettingEntity("cafe_address", "Jl. Malioboro No. 45, Yogyakarta"),
+            SettingEntity("cafe_phone", "0812-3456-7890"),
+            SettingEntity("receipt_footer", "Terima kasih atas kunjungan Anda!\nFollow IG: @rencanakopi.id"),
+            SettingEntity("tax_percentage", "10.0"),
+            SettingEntity("service_charge_percentage", "5.0"),
+            SettingEntity("printer_paper_size", "58"),
+            SettingEntity("points_earn_rate", "200"),
+            SettingEntity("points_redeem_rate", "1"),
+            SettingEntity("google_sheets_url", ""),
+            SettingEntity("google_sheets_id", ""),
+            SettingEntity("google_sheets_api_key", ""),
+            SettingEntity("auto_sync_sheets", "false")
+        )
+        defaultSettings.forEach { database.settingDao().setSetting(it) }
+
+        // 3. Seed Sample Data if requested
+        if (includeSampleData) {
+            seedSampleCategoriesAndProducts(database)
+            seedDefaultVouchersIfNeeded(database)
+        }
+    }
+
+    private suspend fun seedSampleCategoriesAndProducts(database: AppDatabase) {
+        // Categories
         val catCoffeeId = database.categoryDao().insertCategory(
             CategoryEntity(name = "Espresso & Coffee", iconName = "Coffee", colorHex = "#4A2C1D")
         )
@@ -69,7 +148,7 @@ object InitialDataSeeder {
             CategoryEntity(name = "Snack & Meals", iconName = "Food", colorHex = "#C62828")
         )
 
-        // 4. Ingredients (Bahan Baku)
+        // Ingredients (Bahan Baku)
         val ingKopiId = database.ingredientDao().insertIngredient(
             IngredientEntity(name = "Biji Kopi Arabica", unit = "Gram", currentStock = 2500.0, minStock = 500.0, costPerUnit = 250.0)
         )
@@ -98,8 +177,7 @@ object InitialDataSeeder {
             IngredientEntity(name = "Roti Brioche Toast", unit = "Pcs", currentStock = 40.0, minStock = 10.0, costPerUnit = 4000.0)
         )
 
-        // 5. Menus & Recipes
-        // Menu 1: Espresso Single Hot
+        // Menus & Recipes
         val menuEspressoId = database.menuDao().insertMenu(
             MenuEntity(
                 categoryId = catCoffeeId,
@@ -113,7 +191,6 @@ object InitialDataSeeder {
         database.recipeDao().insertRecipe(RecipeEntity(menuId = menuEspressoId, ingredientId = ingKopiId, amountRequired = 18.0))
         database.recipeDao().insertRecipe(RecipeEntity(menuId = menuEspressoId, ingredientId = ingCupHotId, amountRequired = 1.0))
 
-        // Menu 2: Americano Iced
         val menuAmericanoId = database.menuDao().insertMenu(
             MenuEntity(
                 categoryId = catCoffeeId,
@@ -127,7 +204,6 @@ object InitialDataSeeder {
         database.recipeDao().insertRecipe(RecipeEntity(menuId = menuAmericanoId, ingredientId = ingKopiId, amountRequired = 20.0))
         database.recipeDao().insertRecipe(RecipeEntity(menuId = menuAmericanoId, ingredientId = ingCupColdId, amountRequired = 1.0))
 
-        // Menu 3: Kopi Susu Senja (Aren)
         val menuKopiArenId = database.menuDao().insertMenu(
             MenuEntity(
                 categoryId = catCoffeeId,
@@ -143,7 +219,6 @@ object InitialDataSeeder {
         database.recipeDao().insertRecipe(RecipeEntity(menuId = menuKopiArenId, ingredientId = ingArenId, amountRequired = 25.0))
         database.recipeDao().insertRecipe(RecipeEntity(menuId = menuKopiArenId, ingredientId = ingCupColdId, amountRequired = 1.0))
 
-        // Menu 4: Caramel Macchiato
         val menuCaramelId = database.menuDao().insertMenu(
             MenuEntity(
                 categoryId = catCoffeeId,
@@ -159,7 +234,6 @@ object InitialDataSeeder {
         database.recipeDao().insertRecipe(RecipeEntity(menuId = menuCaramelId, ingredientId = ingKaramelId, amountRequired = 25.0))
         database.recipeDao().insertRecipe(RecipeEntity(menuId = menuCaramelId, ingredientId = ingCupColdId, amountRequired = 1.0))
 
-        // Menu 5: Uji Matcha Latte
         val menuMatchaId = database.menuDao().insertMenu(
             MenuEntity(
                 categoryId = catNonCoffeeId,
@@ -174,7 +248,6 @@ object InitialDataSeeder {
         database.recipeDao().insertRecipe(RecipeEntity(menuId = menuMatchaId, ingredientId = ingSusuId, amountRequired = 150.0))
         database.recipeDao().insertRecipe(RecipeEntity(menuId = menuMatchaId, ingredientId = ingCupColdId, amountRequired = 1.0))
 
-        // Menu 6: Butter Croissant
         val menuCroissantId = database.menuDao().insertMenu(
             MenuEntity(
                 categoryId = catPastryId,
@@ -187,7 +260,6 @@ object InitialDataSeeder {
         )
         database.recipeDao().insertRecipe(RecipeEntity(menuId = menuCroissantId, ingredientId = ingCroissantId, amountRequired = 1.0))
 
-        // Menu 7: Kaya Toast Brioche
         val menuToastId = database.menuDao().insertMenu(
             MenuEntity(
                 categoryId = catPastryId,
