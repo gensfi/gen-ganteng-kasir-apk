@@ -62,6 +62,39 @@ class CafePosRepository(
     fun getAllMembers(): Flow<List<MemberEntity>> = memberDao.getAllMembers()
     suspend fun getMemberById(id: Long): MemberEntity? = memberDao.getMemberById(id)
     suspend fun getMemberByPhone(phone: String): MemberEntity? = memberDao.getMemberByPhone(phone.trim())
+
+    suspend fun getMemberByPhoneFlexible(phone: String): MemberEntity? {
+        val raw = phone.trim()
+        if (raw.isBlank()) return null
+        val direct = memberDao.getMemberByPhone(raw)
+        if (direct != null) return direct
+
+        val digits = raw.filter { it.isDigit() }
+        if (digits.length < 5) return null
+
+        val variants = linkedSetOf<String>()
+        variants.add(digits)
+        if (digits.startsWith("08")) {
+            variants.add("628" + digits.substring(2))
+            variants.add("+628" + digits.substring(2))
+            variants.add(digits.substring(1))
+        } else if (digits.startsWith("628")) {
+            variants.add("08" + digits.substring(3))
+            variants.add("+" + digits)
+            variants.add(digits.substring(2))
+        } else if (digits.startsWith("8")) {
+            variants.add("0" + digits)
+            variants.add("62" + digits)
+            variants.add("+62" + digits)
+        }
+
+        for (v in variants) {
+            val found = memberDao.getMemberByPhone(v)
+            if (found != null) return found
+        }
+        return null
+    }
+
     fun searchMembers(query: String): Flow<List<MemberEntity>> = memberDao.searchMembers(query.trim())
     suspend fun insertMember(member: MemberEntity): Long = memberDao.insertMember(member)
     suspend fun updateMember(member: MemberEntity) = memberDao.updateMember(member)

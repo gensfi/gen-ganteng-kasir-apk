@@ -700,10 +700,19 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun checkMemberByPhone(phone: String, onResult: (MemberEntity?) -> Unit) {
+        viewModelScope.launch {
+            val mem = repository.getMemberByPhoneFlexible(phone)
+            onResult(mem)
+        }
+    }
+
     // Process Payment
     fun processPayment(
         paymentMethod: String,
         cashGiven: Double,
+        autoRegisterMember: Boolean = false,
+        newMemberName: String = "",
         onSuccess: (CompletedTransaction) -> Unit,
         onError: (String) -> Unit
     ) {
@@ -725,7 +734,36 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
             val taxAmount = (subtotal * _taxRate.value) / 100.0
             val serviceAmount = (subtotal * _serviceRate.value) / 100.0
 
-            val member = _selectedMember.value ?: if (_customerPhone.value.isNotBlank()) repository.getMemberByPhone(_customerPhone.value) else null
+            var member = if (_customerPhone.value.isNotBlank()) {
+                repository.getMemberByPhoneFlexible(_customerPhone.value) ?: run {
+                    val sel = _selectedMember.value
+                    if (sel != null && (sel.phone.trim() == _customerPhone.value.trim() || sel.phone.filter { it.isDigit() } == _customerPhone.value.filter { it.isDigit() })) {
+                        sel
+                    } else null
+                }
+            } else {
+                _selectedMember.value
+            }
+
+            // Otomatis simpan member baru jika nomor belum terdaftar dan opsi aktif
+            if (member == null && autoRegisterMember && _customerPhone.value.isNotBlank()) {
+                val candidateName = newMemberName.trim().ifBlank { _customerName.value.trim().ifBlank { "Member Baru" } }
+                try {
+                    val newId = repository.insertMember(
+                        MemberEntity(
+                            name = candidateName,
+                            phone = _customerPhone.value.trim(),
+                            points = 0
+                        )
+                    )
+                    member = repository.getMemberById(newId)
+                    if (member != null) {
+                        _selectedMember.value = member
+                        _customerName.value = member.name
+                    }
+                } catch (_: Exception) {}
+            }
+
             val pointsToRedeem = _redeemedPoints.value
             val pointsDiscount = pointsToRedeem * _pointsRedeemRate.value
             val totalDiscounts = _discountAmount.value + pointsDiscount

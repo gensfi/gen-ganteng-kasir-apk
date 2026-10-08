@@ -24,11 +24,35 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.example.data.local.entity.MemberEntity
 import com.example.ui.CafePosViewModel
 import com.example.ui.theme.*
 import com.example.util.SoundHelper
 import java.text.NumberFormat
 import java.util.Locale
+
+private fun normalizeDigits(phone: String): String {
+    return phone.filter { it.isDigit() }
+}
+
+private fun findMatchingMember(raw: String, memberList: List<MemberEntity>): MemberEntity? {
+    val rawTrim = raw.trim()
+    if (rawTrim.isBlank()) return null
+    val digits = normalizeDigits(rawTrim)
+    if (digits.length < 5) return null
+
+    return memberList.firstOrNull { mem ->
+        val memDigits = normalizeDigits(mem.phone)
+        when {
+            memDigits == digits -> true
+            mem.phone.trim().equals(rawTrim, ignoreCase = true) -> true
+            memDigits.endsWith(digits) || digits.endsWith(memDigits) -> true
+            digits.length >= 8 && memDigits.length >= 8 &&
+                (memDigits.takeLast(8) == digits.takeLast(8)) -> true
+            else -> false
+        }
+    }
+}
 
 @Composable
 fun PaymentDialog(
@@ -43,6 +67,8 @@ fun PaymentDialog(
     val discountAmount by viewModel.discountAmount.collectAsState()
     val redeemedPoints by viewModel.redeemedPoints.collectAsState()
     val pointsRedeemRate by viewModel.pointsRedeemRate.collectAsState()
+    val pointsEarnRate by viewModel.pointsEarnRate.collectAsState()
+    val allMembers by viewModel.members.collectAsState()
 
     val taxAmount = (subtotal * taxRate) / 100.0
     val serviceAmount = (subtotal * serviceRate) / 100.0
@@ -56,6 +82,30 @@ fun PaymentDialog(
     val customerName by viewModel.customerName.collectAsState()
     val customerPhone by viewModel.customerPhone.collectAsState()
     val selectedMember by viewModel.selectedMember.collectAsState()
+
+    var whatsAppPhoneInput by remember {
+        mutableStateOf(customerPhone.ifBlank { selectedMember?.phone ?: "" })
+    }
+    var newMemberNameInput by remember {
+        mutableStateOf(customerName.ifBlank { "" })
+    }
+    var autoRegisterNewMember by remember { mutableStateOf(true) }
+
+    // Real-time matched member determination
+    val matchedMember = remember(whatsAppPhoneInput, allMembers, selectedMember) {
+        if (whatsAppPhoneInput.isNotBlank()) {
+            findMatchingMember(whatsAppPhoneInput, allMembers) ?: if (selectedMember != null && normalizeDigits(selectedMember!!.phone) == normalizeDigits(whatsAppPhoneInput)) selectedMember else null
+        } else {
+            selectedMember
+        }
+    }
+
+    // Auto-select matched member in ViewModel when detected
+    LaunchedEffect(matchedMember) {
+        if (matchedMember != null) {
+            viewModel.selectMember(matchedMember)
+        }
+    }
 
     var selectedTab by remember { mutableStateOf("CASH") } // CASH, QRIS, ONLINE
     var cashGivenText by remember { mutableStateOf(totalAmount.toLong().toString()) }
@@ -118,6 +168,275 @@ fun PaymentDialog(
                         )
                     }
                 }
+
+                val potentialPointsEarned = (totalAmount / pointsEarnRate.coerceAtLeast(1.0)).toInt().coerceAtLeast(0)
+
+                // ==========================================
+                // SECTION: WhatsApp & Loyalitas Member
+                // ==========================================
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (matchedMember != null) Color(0xFFF1F8E9) else Color(0xFFFAFAFA)
+                    ),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (matchedMember != null) CoffeeGreen.copy(alpha = 0.6f) else NeutralBorder
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Filled.Phone,
+                                    contentDescription = null,
+                                    tint = CoffeeGreen,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    "WhatsApp & Loyalitas Member",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.5.sp,
+                                    color = CoffeeBrownDark
+                                )
+                            }
+                            if (matchedMember != null) {
+                                Surface(
+                                    color = CoffeeGreen.copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text(
+                                        "✓ Terdaftar",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = CoffeeGreen,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(6.dp))
+
+                        // WhatsApp Number Field
+                        OutlinedTextField(
+                            value = whatsAppPhoneInput,
+                            onValueChange = { input ->
+                                whatsAppPhoneInput = input
+                                viewModel.setCustomerPhone(input)
+                                val found = findMatchingMember(input, allMembers)
+                                if (found != null) {
+                                    viewModel.selectMember(found)
+                                } else {
+                                    if (selectedMember != null) {
+                                        viewModel.selectMember(null)
+                                    }
+                                }
+                            },
+                            label = { Text("Nomor WhatsApp Pelanggan", fontSize = 11.5.sp) },
+                            placeholder = { Text("Contoh: 081234567890", fontSize = 11.5.sp) },
+                            leadingIcon = {
+                                Icon(Icons.Filled.Share, contentDescription = null, tint = CoffeeGreen, modifier = Modifier.size(16.dp))
+                            },
+                            trailingIcon = {
+                                if (whatsAppPhoneInput.isNotBlank()) {
+                                    IconButton(
+                                        onClick = {
+                                            whatsAppPhoneInput = ""
+                                            viewModel.setCustomerPhone("")
+                                            viewModel.selectMember(null)
+                                        },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(Icons.Filled.Clear, contentDescription = "Hapus", modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                            singleLine = true,
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("whatsapp_phone_input")
+                        )
+
+                        // JIKA SUDAH TERDAFTAR: Munculkan Nama dan Jumlah Poin Member Langsung
+                        if (matchedMember != null) {
+                            Spacer(Modifier.height(8.dp))
+                            Surface(
+                                color = Color.White,
+                                shape = RoundedCornerShape(10.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, CoffeeGreen.copy(alpha = 0.4f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Filled.Verified, contentDescription = null, tint = CoffeeGreen, modifier = Modifier.size(18.dp))
+                                            Spacer(Modifier.width(6.dp))
+                                            Text(
+                                                matchedMember.name,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 14.sp,
+                                                color = CoffeeBrownDark
+                                            )
+                                        }
+                                        Surface(
+                                            color = CoffeeAmber,
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            Text(
+                                                "⭐ ${matchedMember.points} Poin",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 12.sp,
+                                                color = Color.White,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(Modifier.height(4.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text("No. HP: ${matchedMember.phone}", fontSize = 11.5.sp, color = NeutralMedium)
+                                        Text("+$potentialPointsEarned Poin dari belanja ini", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = CoffeeGreen)
+                                    }
+
+                                    // Opsi Tukar Poin jika member punya poin
+                                    if (matchedMember.points > 0) {
+                                        Spacer(Modifier.height(6.dp))
+                                        HorizontalDivider(color = NeutralBorder.copy(alpha = 0.5f))
+                                        Spacer(Modifier.height(6.dp))
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            if (redeemedPoints > 0) {
+                                                Text(
+                                                    "Poin terpakai: $redeemedPoints (-${currency.format(pointsDiscount)})",
+                                                    fontSize = 11.5.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = CoffeeGreen
+                                                )
+                                                TextButton(
+                                                    onClick = { viewModel.setRedeemedPoints(0) },
+                                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                                ) {
+                                                    Text("Batal Poin", fontSize = 11.sp, color = CoffeeRed)
+                                                }
+                                            } else {
+                                                Text("Tukar Poin (${currency.format(matchedMember.points * pointsRedeemRate)})", fontSize = 11.5.sp, color = NeutralDark)
+                                                OutlinedButton(
+                                                    onClick = { viewModel.setRedeemedPoints(matchedMember.points) },
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                                ) {
+                                                    Text("Pakai Poin", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = CoffeeBrownPrimary)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        // JIKA BELUM TERDAFTAR: Munculkan Menu Cepat Tambah Member Baru (Sangat Ringkas, Ramping & Hemat Ruang)
+                        else if (normalizeDigits(whatsAppPhoneInput).length >= 5) {
+                            Surface(
+                                color = Color(0xFFFFF9C4).copy(alpha = 0.45f),
+                                shape = RoundedCornerShape(8.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, CoffeeAmber.copy(alpha = 0.45f)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    // Input Nama Member Baru sangat ringkas
+                                    OutlinedTextField(
+                                        value = newMemberNameInput,
+                                        onValueChange = {
+                                            newMemberNameInput = it
+                                            viewModel.setCustomerName(it)
+                                        },
+                                        placeholder = {
+                                            Text(
+                                                "Nama Member Baru (cth: Amanda)",
+                                                fontSize = 11.5.sp,
+                                                color = NeutralMedium
+                                            )
+                                        },
+                                        leadingIcon = {
+                                            Icon(
+                                                Icons.Filled.PersonAddAlt1,
+                                                contentDescription = null,
+                                                tint = BrightOrangePrimary,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        },
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(6.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(min = 44.dp)
+                                            .testTag("new_member_name_input"),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedContainerColor = Color.White,
+                                            unfocusedContainerColor = Color.White
+                                        )
+                                    )
+
+                                    // Checkbox auto-register 1 baris ramping
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { autoRegisterNewMember = !autoRegisterNewMember }
+                                            .padding(vertical = 1.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Checkbox(
+                                            checked = autoRegisterNewMember,
+                                            onCheckedChange = { autoRegisterNewMember = it },
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(
+                                            "Daftar otomatis & dapat +$potentialPointsEarned poin belanja",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = CoffeeBrownDark
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "💡 Masukkan nomor WhatsApp pelanggan untuk cek status loyalitas & pengiriman struk otomatis.",
+                                fontSize = 11.sp,
+                                color = NeutralMedium
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(6.dp))
 
                 // Payment Method Selector Tabs
                 Row(
@@ -271,27 +590,31 @@ fun PaymentDialog(
                 }
 
                 // Customer & WhatsApp Info Banner
-                val activeCustomerName = customerName.ifBlank { selectedMember?.name ?: "" }
-                val activeCustomerPhone = customerPhone.ifBlank { selectedMember?.phone ?: "" }
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = PrimaryContainer.copy(alpha = 0.5f),
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                val finalWhatsApp = whatsAppPhoneInput.trim()
+                if (finalWhatsApp.isNotBlank()) {
+                    val activeCustomerName = if (matchedMember != null) {
+                        matchedMember.name
+                    } else {
+                        newMemberNameInput.trim().ifBlank { customerName.ifBlank { "Pelanggan" } }
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFFE8F5E9),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, CoffeeGreen.copy(alpha = 0.3f)),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)
                     ) {
-                        Icon(Icons.Filled.Share, contentDescription = null, tint = CoffeeGreen, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Column {
-                            Text("Kirim Struk WhatsApp Pelanggan:", fontSize = 10.5.sp, color = NeutralMedium, fontWeight = FontWeight.SemiBold)
-                            if (activeCustomerPhone.isNotBlank()) {
-                                Text("📱 $activeCustomerPhone ${if (activeCustomerName.isNotBlank()) "($activeCustomerName)" else ""}", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = CoffeeBrownDark)
-                                Text("Struk akan otomatis dikirim via WhatsApp setelah pembayaran", fontSize = 10.sp, color = CoffeeGreen)
-                            } else {
-                                Text("Belum ada no. WA pelanggan (dapat diisi nanti di struk)", fontSize = 11.sp, color = NeutralDark)
-                            }
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Filled.Share, contentDescription = null, tint = CoffeeGreen, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                "Struk WA: $finalWhatsApp ($activeCustomerName)",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.5.sp,
+                                color = CoffeeBrownDark
+                            )
                         }
                     }
                 }
@@ -310,6 +633,25 @@ fun PaymentDialog(
                             errorMessage = "Nominal uang tunai kurang dari total belanja!"
                             return@Button
                         }
+
+                        val finalPhone = whatsAppPhoneInput.trim()
+                        viewModel.setCustomerPhone(finalPhone)
+
+                        val willAutoRegister = autoRegisterNewMember && matchedMember == null && finalPhone.isNotBlank()
+                        val memberCandidateName = if (willAutoRegister) {
+                            newMemberNameInput.trim().ifBlank { "Member ${finalPhone.takeLast(4)}" }
+                        } else {
+                            newMemberNameInput.trim().ifBlank { customerName.trim().ifBlank { matchedMember?.name ?: "" } }
+                        }
+
+                        if (memberCandidateName.isNotBlank()) {
+                            viewModel.setCustomerName(memberCandidateName)
+                        }
+
+                        if (matchedMember != null) {
+                            viewModel.selectMember(matchedMember)
+                        }
+
                         isProcessing = true
                         errorMessage = null
                         SoundHelper.playCashChime(context)
@@ -317,6 +659,8 @@ fun PaymentDialog(
                         viewModel.processPayment(
                             paymentMethod = selectedTab,
                             cashGiven = if (selectedTab == "CASH") cashGiven else totalAmount,
+                            autoRegisterMember = willAutoRegister,
+                            newMemberName = memberCandidateName,
                             onSuccess = {
                                 isProcessing = false
                                 onPaymentSuccess()

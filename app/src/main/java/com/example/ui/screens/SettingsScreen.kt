@@ -412,13 +412,16 @@ fun SettingsScreen(
                                     Spacer(Modifier.width(4.dp))
                                     Text("Reset PIN", fontSize = 12.sp, color = BrightRed, fontWeight = FontWeight.Bold)
                                 }
-                                TextButton(
+                                IconButton(
                                     onClick = { showChangeMyPasswordDialog = true },
                                     modifier = Modifier.testTag("btn_change_my_pin_settings")
                                 ) {
-                                    Icon(Icons.Filled.Key, contentDescription = null, modifier = Modifier.size(16.dp), tint = BrightOrangePrimary)
-                                    Spacer(Modifier.width(4.dp))
-                                    Text("Ganti PIN Saya", fontSize = 12.sp, color = BrightOrangePrimary, fontWeight = FontWeight.Bold)
+                                    Icon(
+                                        Icons.Filled.Key,
+                                        contentDescription = "Ganti PIN Saya",
+                                        tint = BrightOrangePrimary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
                                 }
                                 if (currentUser?.role == "ADMIN") {
                                     IconButton(
