@@ -1241,9 +1241,6 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
     init {
         viewModelScope.launch {
             InitialDataSeeder.seedIfNeeded(db)
-            // Auto login default admin for immediate preview usability
-            val admin = db.userDao().getUserByUsername("admin")
-            _currentUser.value = admin
 
             // Load settings
             val savedTax = repository.getSetting("tax_percentage")?.toDoubleOrNull() ?: 10.0
