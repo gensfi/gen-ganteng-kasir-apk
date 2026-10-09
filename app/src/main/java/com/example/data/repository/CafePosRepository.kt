@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import com.example.data.local.AppDatabase
 import com.example.data.local.entity.CategoryEntity
 import com.example.data.local.entity.IngredientEntity
+import com.example.data.local.entity.IngredientPurchaseEntity
 import com.example.data.local.entity.MemberEntity
 import com.example.data.local.entity.MenuEntity
 import com.example.data.local.entity.RecipeEntity
@@ -36,12 +37,22 @@ data class StockValidationResult(
     val insufficientIngredients: List<String> = emptyList()
 )
 
+data class CashierSalesSummary(
+    val cashierName: String,
+    val transactionCount: Int,
+    val totalRevenue: Double,
+    val totalItemsSold: Int
+)
+
 data class ReportSummary(
     val totalRevenue: Double,
     val totalNetProfit: Double,
     val transactionCount: Int,
     val topSellingItems: List<Pair<String, Int>>,
-    val ingredientUsageSummary: List<Pair<String, String>>
+    val ingredientUsageSummary: List<Pair<String, String>>,
+    val purchases: List<IngredientPurchaseEntity> = emptyList(),
+    val totalPurchaseCost: Double = 0.0,
+    val cashierSalesSummary: List<CashierSalesSummary> = emptyList()
 )
 
 class CafePosRepository(
@@ -52,6 +63,7 @@ class CafePosRepository(
     private val categoryDao = database.categoryDao()
     private val menuDao = database.menuDao()
     private val ingredientDao = database.ingredientDao()
+    private val ingredientPurchaseDao = database.ingredientPurchaseDao()
     private val recipeDao = database.recipeDao()
     private val transactionDao = database.transactionDao()
     private val settingDao = database.settingDao()
@@ -144,6 +156,47 @@ class CafePosRepository(
     suspend fun updateIngredient(ingredient: IngredientEntity) = ingredientDao.updateIngredient(ingredient)
     suspend fun deleteIngredient(ingredient: IngredientEntity) = ingredientDao.deleteIngredient(ingredient)
     suspend fun addStock(ingredientId: Long, amount: Double) = ingredientDao.addStock(ingredientId, amount)
+
+    // --- Ingredient Purchases (Pembelian Bahan Baku) ---
+    fun getAllIngredientPurchases(): Flow<List<IngredientPurchaseEntity>> = ingredientPurchaseDao.getAllPurchases()
+    suspend fun getIngredientPurchasesBetween(startTime: Long, endTime: Long): List<IngredientPurchaseEntity> =
+        ingredientPurchaseDao.getPurchasesBetween(startTime, endTime)
+    suspend fun getAllPurchasesList(): List<IngredientPurchaseEntity> =
+        ingredientPurchaseDao.getAllPurchasesList()
+
+    suspend fun purchaseIngredient(
+        ingredientId: Long,
+        quantity: Double,
+        costPerUnit: Double,
+        supplier: String,
+        notes: String,
+        cashierName: String
+    ): Long {
+        val ing = ingredientDao.getIngredientById(ingredientId) ?: return -1L
+        ingredientDao.addStock(ingredientId, quantity)
+        if (costPerUnit > 0) {
+            ingredientDao.updateIngredient(ing.copy(costPerUnit = costPerUnit))
+        }
+        val totalCost = quantity * costPerUnit
+        return ingredientPurchaseDao.insertPurchase(
+            IngredientPurchaseEntity(
+                ingredientId = ingredientId,
+                ingredientName = ing.name,
+                quantity = quantity,
+                unit = ing.unit,
+                costPerUnit = costPerUnit,
+                totalCost = totalCost,
+                supplierName = supplier,
+                notes = notes,
+                cashierName = cashierName,
+                timestamp = System.currentTimeMillis()
+            )
+        )
+    }
+
+    suspend fun deleteIngredientPurchase(purchase: IngredientPurchaseEntity) {
+        ingredientPurchaseDao.deletePurchase(purchase)
+    }
 
     // --- Recipes ---
     fun getAllRecipes(): Flow<List<RecipeEntity>> = recipeDao.getAllRecipes()
@@ -271,12 +324,33 @@ class CafePosRepository(
             ing.name to "${String.format(Locale.US, "%.1f", qty)} ${ing.unit}"
         }
 
+        // Cashier performance / Omset per kasir yang menjual
+        val cashierGroup = transactions.groupBy { it.cashierName.ifBlank { "Kasir" } }
+        val cashierSalesList = cashierGroup.map { (cashier, trxList) ->
+            val trxIds = trxList.map { it.id }.toSet()
+            val itemsSold = filteredItems.filter { it.transactionId in trxIds }.sumOf { it.quantity }
+            val rev = trxList.sumOf { it.totalAmount }
+            CashierSalesSummary(
+                cashierName = cashier,
+                transactionCount = trxList.size,
+                totalRevenue = rev,
+                totalItemsSold = itemsSold
+            )
+        }.sortedByDescending { it.totalRevenue }
+
+        // Raw material purchases in period
+        val purchases = ingredientPurchaseDao.getPurchasesBetween(startDate, endDate)
+        val totalPurchaseCost = purchases.sumOf { it.totalCost }
+
         ReportSummary(
             totalRevenue = totalRevenue,
             totalNetProfit = netProfit,
             transactionCount = transactions.size,
             topSellingItems = topSelling,
-            ingredientUsageSummary = usageSummary
+            ingredientUsageSummary = usageSummary,
+            purchases = purchases,
+            totalPurchaseCost = totalPurchaseCost,
+            cashierSalesSummary = cashierSalesList
         )
     }
 

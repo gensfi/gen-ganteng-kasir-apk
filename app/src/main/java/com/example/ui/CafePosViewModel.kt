@@ -10,6 +10,7 @@ import com.example.data.local.AppDatabase
 import com.example.data.local.InitialDataSeeder
 import com.example.data.local.entity.CategoryEntity
 import com.example.data.local.entity.IngredientEntity
+import com.example.data.local.entity.IngredientPurchaseEntity
 import com.example.data.local.entity.MemberEntity
 import com.example.data.local.entity.MenuEntity
 import com.example.data.local.entity.RecipeEntity
@@ -299,6 +300,9 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val lowStockIngredients: StateFlow<List<IngredientEntity>> = repository.getLowStockIngredients()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val ingredientPurchases: StateFlow<List<IngredientPurchaseEntity>> = repository.getAllIngredientPurchases()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val transactions: StateFlow<List<TransactionEntity>> = repository.getAllTransactions()
@@ -1064,6 +1068,36 @@ class CafePosViewModel(application: Application) : AndroidViewModel(application)
     fun deleteIngredient(ingredient: IngredientEntity, onDone: () -> Unit) {
         viewModelScope.launch {
             repository.deleteIngredient(ingredient)
+            onDone()
+        }
+    }
+
+    fun purchaseIngredient(
+        ingredientId: Long,
+        quantity: Double,
+        costPerUnit: Double,
+        supplier: String,
+        notes: String,
+        onDone: (Boolean) -> Unit
+    ) {
+        viewModelScope.launch {
+            val user = _currentUser.value
+            val cashier = user?.name ?: user?.username ?: "Admin"
+            val res = repository.purchaseIngredient(
+                ingredientId = ingredientId,
+                quantity = quantity,
+                costPerUnit = costPerUnit,
+                supplier = supplier,
+                notes = notes,
+                cashierName = cashier
+            )
+            onDone(res > 0)
+        }
+    }
+
+    fun deleteIngredientPurchase(purchase: IngredientPurchaseEntity, onDone: () -> Unit) {
+        viewModelScope.launch {
+            repository.deleteIngredientPurchase(purchase)
             onDone()
         }
     }

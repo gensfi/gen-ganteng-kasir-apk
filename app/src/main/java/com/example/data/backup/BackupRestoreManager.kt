@@ -86,6 +86,26 @@ class BackupRestoreManager(private val db: AppDatabase) {
         }
         root.put("ingredients", ingArr)
 
+        // 3b. Ingredient Purchases (Riwayat Pembelian Bahan Baku)
+        val purchases = db.ingredientPurchaseDao().getAllPurchasesList()
+        val purchaseArr = JSONArray()
+        purchases.forEach { p ->
+            purchaseArr.put(JSONObject().apply {
+                put("id", p.id)
+                put("ingredientId", p.ingredientId)
+                put("ingredientName", p.ingredientName)
+                put("quantity", p.quantity)
+                put("unit", p.unit)
+                put("costPerUnit", p.costPerUnit)
+                put("totalCost", p.totalCost)
+                put("supplierName", p.supplierName)
+                put("notes", p.notes)
+                put("cashierName", p.cashierName)
+                put("timestamp", p.timestamp)
+            })
+        }
+        root.put("ingredient_purchases", purchaseArr)
+
         // 4. Menus
         val menus = db.menuDao().getAllMenus().first()
         val menuArr = JSONArray()
@@ -243,6 +263,29 @@ class BackupRestoreManager(private val db: AppDatabase) {
                             currentStock = obj.getDouble("currentStock"),
                             minStock = obj.getDouble("minStock"),
                             costPerUnit = obj.optDouble("costPerUnit", 0.0)
+                        )
+                    )
+                }
+            }
+
+            // Restore ingredient purchases
+            if (root.has("ingredient_purchases")) {
+                val purchaseArr = root.getJSONArray("ingredient_purchases")
+                for (i in 0 until purchaseArr.length()) {
+                    val obj = purchaseArr.getJSONObject(i)
+                    db.ingredientPurchaseDao().insertPurchase(
+                        com.example.data.local.entity.IngredientPurchaseEntity(
+                            id = obj.optLong("id", 0),
+                            ingredientId = obj.optLong("ingredientId", 0),
+                            ingredientName = obj.optString("ingredientName", "Bahan"),
+                            quantity = obj.optDouble("quantity", 0.0),
+                            unit = obj.optString("unit", "Gram"),
+                            costPerUnit = obj.optDouble("costPerUnit", 0.0),
+                            totalCost = obj.optDouble("totalCost", 0.0),
+                            supplierName = obj.optString("supplierName", ""),
+                            notes = obj.optString("notes", ""),
+                            cashierName = obj.optString("cashierName", ""),
+                            timestamp = obj.optLong("timestamp", System.currentTimeMillis())
                         )
                     )
                 }

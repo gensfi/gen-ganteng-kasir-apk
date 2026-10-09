@@ -572,7 +572,10 @@ fun ReportsScreen(
                                         cashTotal = cashTotal,
                                         qrisTotal = qrisTotal,
                                         onlineTotal = onlineTotal,
-                                        transferTotal = onlineTotal
+                                        transferTotal = onlineTotal,
+                                        purchases = reportSummary?.purchases ?: emptyList(),
+                                        totalPurchaseCost = reportSummary?.totalPurchaseCost ?: 0.0,
+                                        cashierSales = reportSummary?.cashierSalesSummary ?: emptyList()
                                     )
 
                                     val file = PdfReportGenerator.generateSalesPdf(context, pdfData)
@@ -1058,6 +1061,124 @@ fun ReportsScreen(
                                             Text("${idx + 1}. ${pair.first}", fontSize = 12.5.sp)
                                             Text("${pair.second} terjual", fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = CoffeeBrownPrimary)
                                         }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Ringkasan Omset per Kasir yang Menjual (Cashier Performance)
+                        if (rep.cashierSalesSummary.isNotEmpty()) {
+                            Card(
+                                shape = RoundedCornerShape(14.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Filled.Badge, contentDescription = null, tint = CoffeeBrownPrimary, modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(
+                                            "👤 Ringkasan Omset per Kasir yang Menjual",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp,
+                                            color = CoffeeBrownDark
+                                        )
+                                    }
+                                    Spacer(Modifier.height(10.dp))
+                                    rep.cashierSalesSummary.forEachIndexed { idx, cSale ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 5.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column {
+                                                Text(
+                                                    "${idx + 1}. ${cSale.cashierName}",
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 13.sp
+                                                )
+                                                Text(
+                                                    "${cSale.transactionCount} transaksi • ${cSale.totalItemsSold} item terjual",
+                                                    fontSize = 11.5.sp,
+                                                    color = NeutralMedium
+                                                )
+                                            }
+                                            Text(
+                                                currency.format(cSale.totalRevenue),
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.5.sp,
+                                                color = CoffeeGreen
+                                            )
+                                        }
+                                        if (idx < rep.cashierSalesSummary.size - 1) {
+                                            HorizontalDivider(color = NeutralBorder.copy(alpha = 0.5f), modifier = Modifier.padding(vertical = 2.dp))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Pembelian Bahan Baku Periode Ini
+                        if (rep.purchases.isNotEmpty()) {
+                            Card(
+                                shape = RoundedCornerShape(14.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Filled.ShoppingBag, contentDescription = null, tint = BrightRed, modifier = Modifier.size(18.dp))
+                                            Spacer(Modifier.width(6.dp))
+                                            Text(
+                                                "📦 Belanja Bahan Baku Periode Ini",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 14.sp,
+                                                color = CoffeeBrownDark
+                                            )
+                                        }
+                                        Text(
+                                            currency.format(rep.totalPurchaseCost),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.5.sp,
+                                            color = BrightRed
+                                        )
+                                    }
+                                    Spacer(Modifier.height(10.dp))
+                                    rep.purchases.take(6).forEach { p ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 4.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(p.ingredientName, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+                                                Text(
+                                                    "+${p.quantity} ${p.unit} • Kasir: ${p.cashierName.ifBlank { "Admin" }}",
+                                                    fontSize = 11.sp,
+                                                    color = NeutralMedium
+                                                )
+                                            }
+                                            Text(currency.format(p.totalCost), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = BrightRed)
+                                        }
+                                    }
+                                    if (rep.purchases.size > 6) {
+                                        Text(
+                                            "+ ${rep.purchases.size - 6} pembelian lainnya",
+                                            fontSize = 11.sp,
+                                            color = NeutralMedium,
+                                            modifier = Modifier.padding(top = 4.dp)
+                                        )
                                     }
                                 }
                             }

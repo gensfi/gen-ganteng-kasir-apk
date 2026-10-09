@@ -6,6 +6,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.example.data.local.dao.CategoryDao
 import com.example.data.local.dao.IngredientDao
+import com.example.data.local.dao.IngredientPurchaseDao
 import com.example.data.local.dao.MemberDao
 import com.example.data.local.dao.MenuDao
 import com.example.data.local.dao.RecipeDao
@@ -15,6 +16,7 @@ import com.example.data.local.dao.UserDao
 import com.example.data.local.dao.VoucherDao
 import com.example.data.local.entity.CategoryEntity
 import com.example.data.local.entity.IngredientEntity
+import com.example.data.local.entity.IngredientPurchaseEntity
 import com.example.data.local.entity.MemberEntity
 import com.example.data.local.entity.MenuEntity
 import com.example.data.local.entity.RecipeEntity
@@ -30,6 +32,7 @@ import com.example.data.local.entity.VoucherEntity
         CategoryEntity::class,
         MenuEntity::class,
         IngredientEntity::class,
+        IngredientPurchaseEntity::class,
         RecipeEntity::class,
         TransactionEntity::class,
         TransactionItemEntity::class,
@@ -37,7 +40,7 @@ import com.example.data.local.entity.VoucherEntity
         VoucherEntity::class,
         MemberEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -46,6 +49,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun categoryDao(): CategoryDao
     abstract fun menuDao(): MenuDao
     abstract fun ingredientDao(): IngredientDao
+    abstract fun ingredientPurchaseDao(): IngredientPurchaseDao
     abstract fun recipeDao(): RecipeDao
     abstract fun transactionDao(): TransactionDao
     abstract fun settingDao(): SettingDao

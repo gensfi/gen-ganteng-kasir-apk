@@ -2,6 +2,7 @@ package com.example.data.local
 
 import com.example.data.local.entity.CategoryEntity
 import com.example.data.local.entity.IngredientEntity
+import com.example.data.local.entity.IngredientPurchaseEntity
 import com.example.data.local.entity.MenuEntity
 import com.example.data.local.entity.RecipeEntity
 import com.example.data.local.entity.SettingEntity
@@ -16,6 +17,7 @@ object InitialDataSeeder {
             // Backfill images for existing menus if they don't have imageUrl
             backfillImagesIfMissing(database)
             seedDefaultVouchersIfNeeded(database)
+            seedSamplePurchasesIfNeeded(database)
             return
         }
 
@@ -58,6 +60,7 @@ object InitialDataSeeder {
         // 3, 4, 5. Categories, Ingredients, Menus & Recipes
         seedSampleCategoriesAndProducts(database)
         seedDefaultVouchersIfNeeded(database)
+        seedSamplePurchasesIfNeeded(database)
     }
 
     suspend fun resetDatabaseToFactory(
@@ -334,6 +337,52 @@ object InitialDataSeeder {
                 )
             )
             defaultVouchers.forEach { database.voucherDao().insertVoucher(it) }
+        }
+    }
+
+    suspend fun seedSamplePurchasesIfNeeded(database: AppDatabase) {
+        val existing = database.ingredientPurchaseDao().getAllPurchasesList()
+        if (existing.isEmpty()) {
+            val now = System.currentTimeMillis()
+            val purchases = listOf(
+                IngredientPurchaseEntity(
+                    ingredientId = 1,
+                    ingredientName = "Biji Kopi House Blend",
+                    quantity = 2000.0,
+                    unit = "Gram",
+                    costPerUnit = 120.0,
+                    totalCost = 240000.0,
+                    supplierName = "Roastery Nusantara",
+                    notes = "Restock mingguan biji kopi",
+                    cashierName = "Owner / Manager",
+                    timestamp = now - (2 * 86400 * 1000L)
+                ),
+                IngredientPurchaseEntity(
+                    ingredientId = 2,
+                    ingredientName = "Susu Fresh Milk Pasteurisasi",
+                    quantity = 5000.0,
+                    unit = "ML",
+                    costPerUnit = 22.0,
+                    totalCost = 110000.0,
+                    supplierName = "Dairy Freshindo",
+                    notes = "Pengadaan susu segar",
+                    cashierName = "Kasir 1",
+                    timestamp = now - (1 * 86400 * 1000L)
+                ),
+                IngredientPurchaseEntity(
+                    ingredientId = 3,
+                    ingredientName = "Gula Aren Organik Cair",
+                    quantity = 1000.0,
+                    unit = "ML",
+                    costPerUnit = 45.0,
+                    totalCost = 45000.0,
+                    supplierName = "Aren Organik Kulonprogo",
+                    notes = "Restock sirup aren",
+                    cashierName = "Kasir 1",
+                    timestamp = now - (4 * 3600 * 1000L)
+                )
+            )
+            purchases.forEach { database.ingredientPurchaseDao().insertPurchase(it) }
         }
     }
 }
