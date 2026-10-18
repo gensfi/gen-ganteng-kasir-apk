@@ -50,6 +50,23 @@ object PdfReportGenerator {
         val totalCost: Double
     )
 
+    data class PdfShiftReportData(
+        val cafeName: String,
+        val cafeAddress: String,
+        val cafePhone: String,
+        val cashierName: String,
+        val cashierRole: String,
+        val shiftDateFormatted: String,
+        val printedTimeFormatted: String,
+        val transactions: List<TransactionEntity>,
+        val items: List<TransactionItemEntity> = emptyList(),
+        val totalRevenue: Double,
+        val cashTotal: Double,
+        val qrisTotal: Double,
+        val onlineTotal: Double,
+        val averageTicket: Double
+    )
+
     fun generateSalesPdf(context: Context, data: PdfReportData): File? {
         val pdfDocument = PdfDocument()
         val pageWidth = 595
@@ -592,6 +609,320 @@ object PdfReportGenerator {
             val reportDir = File(context.cacheDir, "reports")
             if (!reportDir.exists()) reportDir.mkdirs()
             val fileName = "Riwayat_Pembelian_Bahan_${System.currentTimeMillis()}.pdf"
+            val file = File(reportDir, fileName)
+            val outputStream = FileOutputStream(file)
+            pdfDocument.writeTo(outputStream)
+            outputStream.flush()
+            outputStream.close()
+            pdfDocument.close()
+            file
+        } catch (e: Exception) {
+            e.printStackTrace()
+            pdfDocument.close()
+            null
+        }
+    }
+
+    fun generateCashierShiftPdf(context: Context, data: PdfShiftReportData): File? {
+        val pdfDocument = PdfDocument()
+        val pageWidth = 595
+        val pageHeight = 842
+
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        val rupiahFormat = NumberFormat.getCurrencyInstance(Locale("id", "ID")).apply {
+            maximumFractionDigits = 0
+        }
+        val dateTimeFormat = SimpleDateFormat("dd/MM/yy HH:mm", Locale("id", "ID"))
+
+        val colorPrimary = Color.rgb(255, 107, 0)
+        val colorDark = Color.rgb(33, 33, 33)
+        val colorGray = Color.rgb(117, 117, 117)
+        val colorLightGray = Color.rgb(245, 245, 245)
+        val colorBorder = Color.rgb(224, 224, 224)
+        val colorGreen = Color.rgb(46, 125, 50)
+        val colorBlue = Color.rgb(25, 118, 210)
+
+        var pageNumber = 1
+        var pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+        var page = pdfDocument.startPage(pageInfo)
+        var canvas = page.canvas
+
+        fun drawHeader() {
+            paint.color = colorPrimary
+            paint.style = Paint.Style.FILL
+            canvas.drawRect(0f, 0f, pageWidth.toFloat(), 75f, paint)
+
+            paint.color = Color.WHITE
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 18f
+            canvas.drawText(data.cafeName.ifBlank { "RENCANA KOPI" }, 30f, 32f, paint)
+
+            paint.textSize = 9.5f
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            canvas.drawText(data.cafeAddress.ifBlank { "Sistem Kasir & POS Kafe" }, 30f, 48f, paint)
+            canvas.drawText("Telp: ${data.cafePhone.ifBlank { "-" }}  •  Dicetak: ${data.printedTimeFormatted}", 30f, 62f, paint)
+
+            paint.color = colorDark
+            paint.textSize = 14f
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            canvas.drawText("LAPORAN REKAP TUTUP SHIFT KASIR", 30f, 98f, paint)
+
+            paint.textSize = 9.5f
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            paint.color = colorGray
+            canvas.drawText("Kasir: ${data.cashierName} (${data.cashierRole})  •  Tanggal Shift: ${data.shiftDateFormatted}", 30f, 112f, paint)
+        }
+
+        fun checkPageBreak(requiredHeight: Float, currentY: Float): Float {
+            if (currentY + requiredHeight > pageHeight - 65f) {
+                paint.color = colorGray
+                paint.textSize = 8f
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                canvas.drawText("Halaman $pageNumber", (pageWidth - 80).toFloat(), (pageHeight - 20).toFloat(), paint)
+
+                pdfDocument.finishPage(page)
+                pageNumber++
+                pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+                page = pdfDocument.startPage(pageInfo)
+                canvas = page.canvas
+
+                paint.color = colorPrimary
+                paint.style = Paint.Style.FILL
+                canvas.drawRect(0f, 0f, pageWidth.toFloat(), 30f, paint)
+                paint.color = Color.WHITE
+                paint.textSize = 10f
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                canvas.drawText("${data.cafeName.ifBlank { "RENCANA KOPI" }} - Rekap Shift ${data.cashierName} (Hal $pageNumber)", 30f, 20f, paint)
+
+                return 50f
+            }
+            return currentY
+        }
+
+        drawHeader()
+        var yPos = 130f
+
+        // KPI Summary Boxes (4 cards)
+        val kpiWidth = (pageWidth - 60 - 30) / 4f
+        val kpiHeight = 52f
+
+        drawKpiBox(canvas, paint, 30f, yPos, kpiWidth, kpiHeight, "TOTAL OMSET", rupiahFormat.format(data.totalRevenue), colorPrimary, colorLightGray, colorBorder)
+        drawKpiBox(canvas, paint, 30f + (kpiWidth + 10f), yPos, kpiWidth, kpiHeight, "TOTAL TRANSAKSI", "${data.transactions.size} Order", colorDark, colorLightGray, colorBorder)
+        drawKpiBox(canvas, paint, 30f + (kpiWidth + 10f) * 2, yPos, kpiWidth, kpiHeight, "KAS LACI (TUNAI)", rupiahFormat.format(data.cashTotal), colorGreen, colorLightGray, colorBorder)
+        drawKpiBox(canvas, paint, 30f + (kpiWidth + 10f) * 3, yPos, kpiWidth, kpiHeight, "RATA-RATA / ORDER", rupiahFormat.format(data.averageTicket), colorBlue, colorLightGray, colorBorder)
+
+        yPos += kpiHeight + 20f
+
+        // Section: Breakdown Metode Pembayaran
+        paint.color = colorDark
+        paint.textSize = 11f
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        canvas.drawText("REKONSILIASI KAS & METODE PEMBAYARAN", 30f, yPos, paint)
+        yPos += 12f
+
+        val cashCount = data.transactions.count { it.paymentMethod.equals("CASH", true) }
+        val qrisCount = data.transactions.count { it.paymentMethod.equals("QRIS", true) }
+        val onlineCount = data.transactions.count { it.paymentMethod.equals("ONLINE", true) || it.paymentMethod.equals("PESANAN_ONLINE", true) || it.paymentMethod.equals("TRANSFER", true) }
+
+        // Draw payment breakdown table
+        paint.color = Color.rgb(240, 240, 240)
+        paint.style = Paint.Style.FILL
+        canvas.drawRect(30f, yPos, (pageWidth - 30).toFloat(), yPos + 18f, paint)
+
+        paint.color = colorDark
+        paint.textSize = 8.5f
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        canvas.drawText("METODE PEMBAYARAN", 40f, yPos + 12f, paint)
+        canvas.drawText("STATUS KAS / REKENING", 190f, yPos + 12f, paint)
+        canvas.drawText("ORDER", 350f, yPos + 12f, paint)
+        canvas.drawText("NOMINAL DITERIMA", 440f, yPos + 12f, paint)
+        yPos += 20f
+
+        val paymentRows = listOf(
+            Triple("1. Uang Tunai (Cash)", "Fisik Laci (Wajib Disetor)", Pair(cashCount, data.cashTotal)),
+            Triple("2. QRIS (Digital)", "Rekening Digital", Pair(qrisCount, data.qrisTotal)),
+            Triple("3. Pesanan Online / Transfer", "Aplikasi / Bank", Pair(onlineCount, data.onlineTotal))
+        )
+
+        for (row in paymentRows) {
+            paint.color = Color.rgb(250, 250, 250)
+            paint.style = Paint.Style.FILL
+            canvas.drawRect(30f, yPos, (pageWidth - 30).toFloat(), yPos + 18f, paint)
+
+            paint.color = colorDark
+            paint.textSize = 8f
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            canvas.drawText(row.first, 40f, yPos + 12f, paint)
+            canvas.drawText(row.second, 190f, yPos + 12f, paint)
+            canvas.drawText("${row.third.first}x", 350f, yPos + 12f, paint)
+
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            canvas.drawText(rupiahFormat.format(row.third.second), 440f, yPos + 12f, paint)
+            yPos += 20f
+        }
+
+        // Cash drawer highlight box
+        yPos += 6f
+        paint.color = Color.rgb(232, 245, 233)
+        paint.style = Paint.Style.FILL
+        canvas.drawRoundRect(30f, yPos, (pageWidth - 30).toFloat(), yPos + 24f, 6f, 6f, paint)
+
+        paint.color = Color.rgb(46, 125, 50)
+        paint.textSize = 9f
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        canvas.drawText("JUMLAH FISIK KAS LACI WAJIB SERAH TERIMA: ${rupiahFormat.format(data.cashTotal)}", 40f, yPos + 16f, paint)
+        yPos += 36f
+
+        // Section: Top Sold Items during shift if available
+        if (data.items.isNotEmpty()) {
+            val itemSummary = data.items.groupBy { it.menuName }
+                .map { (name, group) ->
+                    val qty = group.sumOf { it.quantity }
+                    val total = group.sumOf { it.subtotal }
+                    Triple(name, qty, total)
+                }.sortedByDescending { it.second }
+
+            yPos = checkPageBreak(80f, yPos)
+            paint.color = colorDark
+            paint.textSize = 11f
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            canvas.drawText("PRODUK TERJUAL SELAMA SHIFT (${itemSummary.size} Menu)", 30f, yPos, paint)
+            yPos += 12f
+
+            paint.color = Color.rgb(235, 235, 235)
+            paint.style = Paint.Style.FILL
+            canvas.drawRect(30f, yPos, (pageWidth - 30).toFloat(), yPos + 18f, paint)
+
+            paint.color = colorDark
+            paint.textSize = 8.5f
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            canvas.drawText("NO", 36f, yPos + 13f, paint)
+            canvas.drawText("NAMA PRODUK", 65f, yPos + 13f, paint)
+            canvas.drawText("QTY TERJUAL", 360f, yPos + 13f, paint)
+            canvas.drawText("TOTAL PENJUALAN", 450f, yPos + 13f, paint)
+            yPos += 20f
+
+            itemSummary.take(15).forEachIndexed { idx, item ->
+                yPos = checkPageBreak(20f, yPos)
+                if (idx % 2 == 1) {
+                    paint.color = Color.rgb(248, 248, 248)
+                    paint.style = Paint.Style.FILL
+                    canvas.drawRect(30f, yPos, (pageWidth - 30).toFloat(), yPos + 16f, paint)
+                }
+                paint.color = colorDark
+                paint.textSize = 8f
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                canvas.drawText("${idx + 1}", 36f, yPos + 12f, paint)
+                canvas.drawText(item.first, 65f, yPos + 12f, paint)
+                canvas.drawText("${item.second} porsi", 360f, yPos + 12f, paint)
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                canvas.drawText(rupiahFormat.format(item.third), 450f, yPos + 12f, paint)
+                yPos += 18f
+            }
+            yPos += 15f
+        }
+
+        // Section: Transaction List
+        yPos = checkPageBreak(80f, yPos)
+        paint.color = colorDark
+        paint.textSize = 11f
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        canvas.drawText("DAFTAR LENGKAP TRANSAKSI SHIFT (${data.transactions.size} Order)", 30f, yPos, paint)
+        yPos += 12f
+
+        paint.color = Color.rgb(235, 235, 235)
+        paint.style = Paint.Style.FILL
+        canvas.drawRect(30f, yPos, (pageWidth - 30).toFloat(), yPos + 18f, paint)
+
+        paint.color = colorDark
+        paint.textSize = 8.5f
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        canvas.drawText("NO", 36f, yPos + 13f, paint)
+        canvas.drawText("JAM", 60f, yPos + 13f, paint)
+        canvas.drawText("NO STRUK", 110f, yPos + 13f, paint)
+        canvas.drawText("METODE", 210f, yPos + 13f, paint)
+        canvas.drawText("PELANGGAN", 290f, yPos + 13f, paint)
+        canvas.drawText("TOTAL ORDER", 460f, yPos + 13f, paint)
+        yPos += 20f
+
+        data.transactions.forEachIndexed { idx, trx ->
+            yPos = checkPageBreak(20f, yPos)
+            if (idx % 2 == 1) {
+                paint.color = Color.rgb(248, 248, 248)
+                paint.style = Paint.Style.FILL
+                canvas.drawRect(30f, yPos, (pageWidth - 30).toFloat(), yPos + 16f, paint)
+            }
+            paint.color = colorDark
+            paint.textSize = 8f
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            canvas.drawText("${idx + 1}", 36f, yPos + 12f, paint)
+            canvas.drawText(dateTimeFormat.format(Date(trx.timestamp)).substringAfter(" "), 60f, yPos + 12f, paint)
+            canvas.drawText(trx.id.takeLast(10).uppercase(), 110f, yPos + 12f, paint)
+            canvas.drawText(trx.paymentMethod.uppercase(), 210f, yPos + 12f, paint)
+            canvas.drawText((trx.customerName ?: "").ifBlank { "Pelanggan Umum" }, 290f, yPos + 12f, paint)
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            canvas.drawText(rupiahFormat.format(trx.totalAmount), 460f, yPos + 12f, paint)
+            yPos += 18f
+        }
+
+        // Section: Handover Signature Boxes
+        yPos = checkPageBreak(110f, yPos + 20f)
+        val signWidth = (pageWidth - 60 - 40) / 2f
+        val signHeight = 75f
+
+        // Kasir Signature
+        paint.color = Color.rgb(245, 245, 245)
+        paint.style = Paint.Style.FILL
+        canvas.drawRoundRect(30f, yPos, 30f + signWidth, yPos + signHeight, 8f, 8f, paint)
+        paint.color = colorBorder
+        paint.style = Paint.Style.STROKE
+        canvas.drawRoundRect(30f, yPos, 30f + signWidth, yPos + signHeight, 8f, 8f, paint)
+
+        paint.style = Paint.Style.FILL
+        paint.color = colorDark
+        paint.textSize = 8.5f
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        canvas.drawText("Kasir yang Menyerahkan:", 40f, yPos + 18f, paint)
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        paint.color = colorGray
+        canvas.drawText("(Tanda Tangan & Nama Terang)", 40f, yPos + 60f, paint)
+        paint.color = colorDark
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        canvas.drawText("${data.cashierName} (${data.cashierRole})", 40f, yPos + 70f, paint)
+
+        // Supervisor / Admin Signature
+        val adminX = 30f + signWidth + 40f
+        paint.color = Color.rgb(245, 245, 245)
+        paint.style = Paint.Style.FILL
+        canvas.drawRoundRect(adminX, yPos, adminX + signWidth, yPos + signHeight, 8f, 8f, paint)
+        paint.color = colorBorder
+        paint.style = Paint.Style.STROKE
+        canvas.drawRoundRect(adminX, yPos, adminX + signWidth, yPos + signHeight, 8f, 8f, paint)
+
+        paint.style = Paint.Style.FILL
+        paint.color = colorDark
+        paint.textSize = 8.5f
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        canvas.drawText("Diterima oleh (Supervisor / Owner):", adminX + 10f, yPos + 18f, paint)
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        paint.color = colorGray
+        canvas.drawText("(Tanda Tangan & Nama Terang)", adminX + 10f, yPos + 60f, paint)
+        paint.color = colorDark
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        canvas.drawText("Supervisor / Manager Kasir", adminX + 10f, yPos + 70f, paint)
+
+        // Page footer
+        paint.color = colorGray
+        paint.textSize = 8f
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        canvas.drawText("Halaman $pageNumber", (pageWidth - 80).toFloat(), (pageHeight - 20).toFloat(), paint)
+
+        pdfDocument.finishPage(page)
+
+        return try {
+            val reportDir = File(context.cacheDir, "reports")
+            if (!reportDir.exists()) reportDir.mkdirs()
+            val fileName = "Laporan_Shift_${data.cashierName.replace(" ", "_")}_${System.currentTimeMillis()}.pdf"
             val file = File(reportDir, fileName)
             val outputStream = FileOutputStream(file)
             pdfDocument.writeTo(outputStream)

@@ -49,7 +49,9 @@ fun MainAppScaffold(viewModel: CafePosViewModel) {
     }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val isWide = maxWidth >= 600.dp
+        val screenWidth = maxWidth
+        val isWide = screenWidth >= 600.dp
+        val showLabels = screenWidth >= 360.dp
 
         Row(modifier = Modifier.fillMaxSize()) {
             // Adaptive Navigation Rail on wide screens
@@ -149,16 +151,18 @@ fun MainAppScaffold(viewModel: CafePosViewModel) {
                             NavigationBarItem(
                                 selected = currentScreen == CafeScreen.POS,
                                 onClick = { viewModel.navigateTo(CafeScreen.POS) },
-                                icon = { Icon(Icons.Filled.PointOfSale, contentDescription = null) },
-                                label = { Text("Kasir") },
+                                icon = { Icon(Icons.Filled.PointOfSale, contentDescription = "Kasir") },
+                                label = { Text("Kasir", fontSize = 11.sp, maxLines = 1) },
+                                alwaysShowLabel = showLabels,
                                 modifier = Modifier.testTag("nav_pos")
                             )
 
                             NavigationBarItem(
                                 selected = currentScreen == CafeScreen.PRINTER_SETTINGS,
                                 onClick = { viewModel.navigateTo(CafeScreen.PRINTER_SETTINGS) },
-                                icon = { Icon(Icons.Filled.Print, contentDescription = null) },
-                                label = { Text("Printer") },
+                                icon = { Icon(Icons.Filled.Print, contentDescription = "Printer") },
+                                label = { Text("Printer", fontSize = 11.sp, maxLines = 1) },
+                                alwaysShowLabel = showLabels,
                                 modifier = Modifier.testTag("nav_printer")
                             )
 
@@ -166,30 +170,34 @@ fun MainAppScaffold(viewModel: CafePosViewModel) {
                                 NavigationBarItem(
                                     selected = currentScreen == CafeScreen.CASHIER_SUMMARY,
                                     onClick = { viewModel.navigateTo(CafeScreen.CASHIER_SUMMARY) },
-                                    icon = { Icon(Icons.Filled.AccountBalanceWallet, contentDescription = null) },
-                                    label = { Text("Rekap Kas", maxLines = 1, fontSize = 12.sp) },
+                                    icon = { Icon(Icons.Filled.AccountBalanceWallet, contentDescription = "Rekap Kas") },
+                                    label = { Text("Rekap Kas", maxLines = 1, fontSize = 11.sp) },
+                                    alwaysShowLabel = showLabels,
                                     modifier = Modifier.testTag("nav_cashier_summary")
                                 )
                             } else {
                                 NavigationBarItem(
                                     selected = currentScreen == CafeScreen.INVENTORY,
                                     onClick = { viewModel.navigateTo(CafeScreen.INVENTORY) },
-                                    icon = { Icon(Icons.Filled.Inventory2, contentDescription = null) },
-                                    label = { Text("Bahan") },
+                                    icon = { Icon(Icons.Filled.Inventory2, contentDescription = "Bahan") },
+                                    label = { Text("Bahan", fontSize = 11.sp, maxLines = 1) },
+                                    alwaysShowLabel = showLabels,
                                     modifier = Modifier.testTag("nav_inventory")
                                 )
                                 NavigationBarItem(
                                     selected = currentScreen == CafeScreen.MENU_MANAGEMENT,
                                     onClick = { viewModel.navigateTo(CafeScreen.MENU_MANAGEMENT) },
-                                    icon = { Icon(Icons.Filled.RestaurantMenu, contentDescription = null) },
-                                    label = { Text("Menu") },
+                                    icon = { Icon(Icons.Filled.RestaurantMenu, contentDescription = "Menu") },
+                                    label = { Text("Menu", fontSize = 11.sp, maxLines = 1) },
+                                    alwaysShowLabel = showLabels,
                                     modifier = Modifier.testTag("nav_menu")
                                 )
                                 NavigationBarItem(
                                     selected = currentScreen == CafeScreen.REPORTS,
                                     onClick = { viewModel.navigateTo(CafeScreen.REPORTS) },
-                                    icon = { Icon(Icons.Filled.BarChart, contentDescription = null) },
-                                    label = { Text("Laporan") },
+                                    icon = { Icon(Icons.Filled.BarChart, contentDescription = "Laporan") },
+                                    label = { Text("Laporan", fontSize = 11.sp, maxLines = 1) },
+                                    alwaysShowLabel = showLabels,
                                     modifier = Modifier.testTag("nav_reports")
                                 )
                                 NavigationBarItem(
@@ -198,8 +206,9 @@ fun MainAppScaffold(viewModel: CafePosViewModel) {
                                         CafeScreen.SETTINGS
                                     ),
                                     onClick = { showMoreMenuSheet = true },
-                                    icon = { Icon(Icons.Filled.MoreHoriz, contentDescription = null) },
-                                    label = { Text("Lainnya") },
+                                    icon = { Icon(Icons.Filled.MoreHoriz, contentDescription = "Lainnya") },
+                                    label = { Text("Lainnya", fontSize = 11.sp, maxLines = 1) },
+                                    alwaysShowLabel = showLabels,
                                     modifier = Modifier.testTag("nav_more")
                                 )
                             }

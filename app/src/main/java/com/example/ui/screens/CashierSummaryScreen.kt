@@ -26,7 +26,11 @@ import androidx.compose.ui.unit.sp
 import com.example.data.local.entity.TransactionEntity
 import com.example.ui.CafePosViewModel
 import com.example.ui.theme.*
+import com.example.util.PdfReportGenerator
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -46,6 +50,8 @@ fun CashierSummaryScreen(
 
     var filterPeriod by remember { mutableStateOf("TODAY") } // TODAY, ALL_MINE, ALL_CASHIERS
     var selectedTrxForDetail by remember { mutableStateOf<TransactionEntity?>(null) }
+    var isGeneratingShiftPdf by remember { mutableStateOf(false) }
+    var showCloseShiftDialog by remember { mutableStateOf(false) }
 
     val currency = remember {
         NumberFormat.getCurrencyInstance(Locale("id", "ID")).apply { maximumFractionDigits = 0 }
@@ -96,6 +102,36 @@ fun CashierSummaryScreen(
     val onlineTransactions = filteredTransactions.filter { it.paymentMethod.equals("ONLINE", true) || it.paymentMethod.equals("PESANAN_ONLINE", true) || it.paymentMethod.equals("TRANSFER", true) }
     val onlineTotal = onlineTransactions.sumOf { it.totalAmount }
 
+    val generateShiftPdfFile: suspend () -> File? = {
+        val cafeName = viewModel.repository.getSetting("cafe_name") ?: "Rencana Kopi"
+        val cafeAddress = viewModel.repository.getSetting("cafe_address") ?: "Jl. Kopi Nikmat No. 1"
+        val cafePhone = viewModel.repository.getSetting("cafe_phone") ?: "0812-3456-7890"
+
+        val allItems = withContext(Dispatchers.IO) {
+            viewModel.repository.getAllTransactionItems()
+        }
+        val trxIds = filteredTransactions.map { it.id }.toSet()
+        val shiftItems = allItems.filter { it.transactionId in trxIds }
+
+        val pdfData = PdfReportGenerator.PdfShiftReportData(
+            cafeName = cafeName,
+            cafeAddress = cafeAddress,
+            cafePhone = cafePhone,
+            cashierName = currentUser?.name ?: "Kasir",
+            cashierRole = currentUser?.role ?: "KASIR",
+            shiftDateFormatted = dateFormat.format(Date()),
+            printedTimeFormatted = SimpleDateFormat("dd MMM yyyy, HH:mm", Locale("id", "ID")).format(Date()),
+            transactions = filteredTransactions,
+            items = shiftItems,
+            totalRevenue = totalMoneyReceived,
+            cashTotal = cashTotal,
+            qrisTotal = qrisTotal,
+            onlineTotal = onlineTotal,
+            averageTicket = averageTicket
+        )
+        PdfReportGenerator.generateCashierShiftPdf(context, pdfData)
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -118,6 +154,35 @@ fun CashierSummaryScreen(
                     }
                 },
                 actions = {
+                    // Export PDF Shift Report
+                    IconButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                try {
+                                    isGeneratingShiftPdf = true
+                                    val file = generateShiftPdfFile()
+                                    if (file != null) {
+                                        PdfReportGenerator.openPdf(context, file)
+                                    } else {
+                                        Toast.makeText(context, "Gagal membuat PDF Laporan Shift", Toast.LENGTH_SHORT).show()
+                                    }
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                                } finally {
+                                    isGeneratingShiftPdf = false
+                                }
+                            }
+                        },
+                        enabled = !isGeneratingShiftPdf,
+                        modifier = Modifier.testTag("btn_export_shift_pdf")
+                    ) {
+                        if (isGeneratingShiftPdf) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Filled.PictureAsPdf, contentDescription = "Ekspor PDF Shift", tint = BrightRed)
+                        }
+                    }
+
                     IconButton(
                         onClick = {
                             coroutineScope.launch {
@@ -305,60 +370,152 @@ fun CashierSummaryScreen(
                 }
             }
 
-            // Quick Actions: Print Shift Report or Handover
+            // Quick Actions: PDF Shift Report, Print Bluetooth, Close Shift
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Button(
-                        onClick = {
-                            coroutineScope.launch {
-                                val reportText = buildString {
-                                    appendLine("=== REKAP SHIFT KASIR ===")
-                                    appendLine("Rencana Kopi POS")
-                                    appendLine("Tanggal: ${dateFormat.format(Date())} ${timeFormat.format(Date())}")
-                                    appendLine("Kasir  : ${currentUser?.name ?: "-"}")
-                                    appendLine("--------------------------------")
-                                    appendLine("Total Order : $totalOrders Transaksi")
-                                    appendLine("Total Uang  : ${currency.format(totalMoneyReceived)}")
-                                    appendLine("--------------------------------")
-                                    appendLine("RINCIAN METODE BAYAR:")
-                                    appendLine("Tunai/Cash     : ${currency.format(cashTotal)} (${cashTransactions.size}x)")
-                                    appendLine("QRIS           : ${currency.format(qrisTotal)} (${qrisTransactions.size}x)")
-                                    appendLine("Pesanan Online : ${currency.format(onlineTotal)} (${onlineTransactions.size}x)")
-                                    appendLine("--------------------------------")
-                                    appendLine("Kas Laci Fisik : ${currency.format(cashTotal)}")
-                                    appendLine("================================")
-                                }
-                                viewModel.printCustomReceipt(reportText)
-                                Toast.makeText(context, "Mencetak Struk Rekap Kasir...", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = BrightOrangePrimary),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                            .testTag("btn_print_shift_bottom")
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Icon(Icons.Filled.Print, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Cetak Struk Rekap", fontWeight = FontWeight.Bold)
-                    }
+                        Text(
+                            "Aksi Selesai Shift & Laporan",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = NeutralDark
+                        )
 
-                    OutlinedButton(
-                        onClick = {
-                            viewModel.switchUser()
-                        },
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                    ) {
-                        Icon(Icons.Filled.Logout, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Tutup Shift Kasir", fontWeight = FontWeight.SemiBold)
+                        // Row 1: Generate PDF Shift Report & Share PDF
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        try {
+                                            isGeneratingShiftPdf = true
+                                            val file = generateShiftPdfFile()
+                                            if (file != null) {
+                                                PdfReportGenerator.openPdf(context, file)
+                                            } else {
+                                                Toast.makeText(context, "Gagal membuat PDF Laporan Shift", Toast.LENGTH_SHORT).show()
+                                            }
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                                        } finally {
+                                            isGeneratingShiftPdf = false
+                                        }
+                                    }
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = BrightOrangePrimary),
+                                enabled = !isGeneratingShiftPdf,
+                                modifier = Modifier
+                                    .weight(1.3f)
+                                    .height(48.dp)
+                                    .testTag("btn_export_pdf_shift_main")
+                            ) {
+                                if (isGeneratingShiftPdf) {
+                                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Icon(Icons.Filled.PictureAsPdf, contentDescription = null, modifier = Modifier.size(18.dp))
+                                }
+                                Spacer(Modifier.width(6.dp))
+                                Text("Laporan PDF Shift", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
+
+                            FilledTonalButton(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        try {
+                                            isGeneratingShiftPdf = true
+                                            val file = generateShiftPdfFile()
+                                            if (file != null) {
+                                                PdfReportGenerator.sharePdf(context, file)
+                                            } else {
+                                                Toast.makeText(context, "Gagal menyiapkan file PDF", Toast.LENGTH_SHORT).show()
+                                            }
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                                        } finally {
+                                            isGeneratingShiftPdf = false
+                                        }
+                                    }
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                enabled = !isGeneratingShiftPdf,
+                                modifier = Modifier
+                                    .weight(0.9f)
+                                    .height(48.dp)
+                                    .testTag("btn_share_pdf_shift")
+                            ) {
+                                Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(17.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Bagikan", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+
+                        // Row 2: Print Thermal Receipt & Close Shift
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        val reportText = buildString {
+                                            appendLine("=== REKAP SHIFT KASIR ===")
+                                            appendLine("Rencana Kopi POS")
+                                            appendLine("Tanggal: ${dateFormat.format(Date())} ${timeFormat.format(Date())}")
+                                            appendLine("Kasir  : ${currentUser?.name ?: "-"}")
+                                            appendLine("--------------------------------")
+                                            appendLine("Total Order : $totalOrders Transaksi")
+                                            appendLine("Total Uang  : ${currency.format(totalMoneyReceived)}")
+                                            appendLine("--------------------------------")
+                                            appendLine("RINCIAN METODE BAYAR:")
+                                            appendLine("Tunai/Cash     : ${currency.format(cashTotal)} (${cashTransactions.size}x)")
+                                            appendLine("QRIS           : ${currency.format(qrisTotal)} (${qrisTransactions.size}x)")
+                                            appendLine("Pesanan Online : ${currency.format(onlineTotal)} (${onlineTransactions.size}x)")
+                                            appendLine("--------------------------------")
+                                            appendLine("Kas Laci Fisik : ${currency.format(cashTotal)}")
+                                            appendLine("================================")
+                                        }
+                                        viewModel.printCustomReceipt(reportText)
+                                        Toast.makeText(context, "Mencetak Struk Rekap Kasir...", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.dp)
+                                    .testTag("btn_print_shift_bottom")
+                            ) {
+                                Icon(Icons.Filled.Print, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Cetak Struk", fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp)
+                            }
+
+                            Button(
+                                onClick = {
+                                    showCloseShiftDialog = true
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = BrightRed),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.dp)
+                                    .testTag("btn_tutup_shift")
+                            ) {
+                                Icon(Icons.Filled.Logout, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Tutup Shift", fontWeight = FontWeight.Bold, fontSize = 12.5.sp)
+                            }
+                        }
                     }
                 }
             }
@@ -599,6 +756,139 @@ fun CashierSummaryScreen(
             dismissButton = {
                 TextButton(onClick = { selectedTrxForDetail = null }) {
                     Text("Tutup")
+                }
+            }
+        )
+    }
+
+    // Close Shift Confirmation & PDF Export Dialog
+    if (showCloseShiftDialog) {
+        AlertDialog(
+            onDismissRequest = { showCloseShiftDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.AccountBalanceWallet, contentDescription = null, tint = BrightOrangePrimary)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Tutup Shift & Rekap Kasir", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Pastikan uang fisik di laci kasir dan catatan transaksi sudah sesuai sebelum menutup shift.",
+                        fontSize = 12.5.sp,
+                        color = NeutralMedium
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = FreshGreenLight,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text("UANG FISIK KAS LACI WAJIB ADA:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = FreshGreen)
+                            Text(currency.format(cashTotal), fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = FreshGreen)
+                            Text("${cashTransactions.size} Transaksi Tunai", fontSize = 11.sp, color = NeutralMedium)
+                        }
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = NeutralLight,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text("Total Omset", fontSize = 11.sp, color = NeutralMedium)
+                                Text(currency.format(totalMoneyReceived), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("Total Order", fontSize = 11.sp, color = NeutralMedium)
+                                Text("$totalOrders Order", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    Text("Pilih aksi laporan shift Anda:", fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp)
+
+                    // Action: Open PDF
+                    Button(
+                        onClick = {
+                            coroutineScope.launch {
+                                try {
+                                    isGeneratingShiftPdf = true
+                                    val file = generateShiftPdfFile()
+                                    if (file != null) {
+                                        PdfReportGenerator.openPdf(context, file)
+                                    } else {
+                                        Toast.makeText(context, "Gagal membuat PDF Laporan Shift", Toast.LENGTH_SHORT).show()
+                                    }
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                                } finally {
+                                    isGeneratingShiftPdf = false
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = BrightOrangePrimary),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth().height(44.dp)
+                    ) {
+                        Icon(Icons.Filled.PictureAsPdf, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("📄 Buka Laporan PDF Shift", fontWeight = FontWeight.Bold)
+                    }
+
+                    // Action: Share PDF
+                    OutlinedButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                try {
+                                    isGeneratingShiftPdf = true
+                                    val file = generateShiftPdfFile()
+                                    if (file != null) {
+                                        PdfReportGenerator.sharePdf(context, file)
+                                    } else {
+                                        Toast.makeText(context, "Gagal menyiapkan file PDF", Toast.LENGTH_SHORT).show()
+                                    }
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                                } finally {
+                                    isGeneratingShiftPdf = false
+                                }
+                            }
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth().height(44.dp)
+                    ) {
+                        Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("📲 Bagikan PDF (WhatsApp)", fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showCloseShiftDialog = false
+                        viewModel.switchUser()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = BrightRed),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(Icons.Filled.Logout, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Tutup Shift & Keluar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCloseShiftDialog = false }) {
+                    Text("Batal")
                 }
             }
         )
